@@ -105,6 +105,12 @@ If an error occurs, the worker returns a JSON response with an error message:
 The worker supports the following environment variables:
 
 - `GPU_DEVICE`: Specifies which GPU device to use (e.g., "cuda:0", "cuda:1"). Defaults to "cuda:0" if not specified.
+- `MAX_MODELS`: Number of model instances to load in the pool. Defaults to 4. Adjust based on available GPU memory.
+- `MAX_CONCURRENCY`: Maximum number of concurrent requests the worker can handle. Defaults to 4 (should match MAX_MODELS).
+- `MIN_CONCURRENCY`: Minimum number of concurrent requests the worker will maintain. Defaults to 1.
+- `SCALE_UP_THRESHOLD`: Request rate threshold (requests per second) above which concurrency will increase. Defaults to 0.05.
+- `SCALE_DOWN_THRESHOLD`: Request rate threshold (requests per second) below which concurrency will decrease. Defaults to 0.0.
+
 
 ## Dependencies
 

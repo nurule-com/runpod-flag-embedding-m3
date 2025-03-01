@@ -11,7 +11,9 @@ from FlagEmbedding import BGEM3FlagModel
 # Global model pool
 model_pool = []
 model_pool_lock = threading.Lock()
-MAX_MODELS = 4  # Number of model instances to load (adjust based on GPU memory)
+
+# Get MAX_MODELS from environment variable or use default
+MAX_MODELS = int(os.environ.get("MAX_MODELS", "4"))  # Default to 4 model instances
 
 def load_model_pool():
     """
