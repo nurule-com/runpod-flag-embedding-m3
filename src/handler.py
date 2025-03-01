@@ -44,26 +44,25 @@ async def handler(job):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-    # Update request metrics
-    global request_count, last_request_time
-    request_count += 1
-    last_request_time = time.time()
-    
-    job_input = job["input"]
-    
-    # Validate input
-    is_valid, result = validate_input(job_input)
-    if not is_valid:
-        return result
-    
-    # Handle empty list case
-    if result["empty"]:
-        return {"results": []}
-    
     try:
+        # Update request metrics
+        global request_count, last_request_time
+        request_count += 1
+        last_request_time = time.time()
+        
+        job_input = job["input"]
+        
+        # Validate input
+        is_valid, result = validate_input(job_input)
+        if not is_valid:
+            return result
+        
+        # Handle empty list case
+        if result["empty"]:
+            return {"results": []}
+    
         # Process the texts
         batch_mode = "no batching" if result["batch_size"] <= 0 else f"batch size {result['batch_size']}"
-        print(f"Processing {len(result['texts'])} texts (isPassage={result['is_passage']}, {batch_mode})")
         
         # Offload the CPU-intensive model inference to a separate thread
         # This allows the event loop to handle other requests while waiting for the model
@@ -75,9 +74,7 @@ async def handler(job):
             result["is_passage"],
             result["batch_size"]
         )
-        
-        print(f"Successfully processed {len(results)} texts")
-        
+                
         return {"results": results}
     except Exception as e:
         return {"error": f"Error processing texts: {str(e)}"}
