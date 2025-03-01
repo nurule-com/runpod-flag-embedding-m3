@@ -26,6 +26,16 @@ def load_model_pool():
     gpu_device = os.environ.get("GPU_DEVICE", "cuda:0")
     model_name = "BAAI/bge-m3"
     
+    # Disable hf_transfer if the package is not available
+    # This prevents the error when HF_HUB_ENABLE_HF_TRANSFER=1 but hf_transfer is not installed
+    if os.environ.get("HF_HUB_ENABLE_HF_TRANSFER") == "1":
+        try:
+            import hf_transfer
+            print("Using hf_transfer for fast downloads")
+        except ImportError:
+            print("hf_transfer package not found, disabling fast downloads")
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+    
     try:
         print(f"Loading {MAX_MODELS} instances of {model_name} model on {gpu_device}...")
         
