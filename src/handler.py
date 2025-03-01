@@ -22,13 +22,15 @@ MAX_CONCURRENCY = int(os.environ.get("MAX_CONCURRENCY", "4"))  # Default to 4
 MIN_CONCURRENCY = int(os.environ.get("MIN_CONCURRENCY", "1"))  # Default to 1
 SCALE_UP_THRESHOLD = float(os.environ.get("SCALE_UP_THRESHOLD", "0.05"))  # Default to 0.05 req/s
 SCALE_DOWN_THRESHOLD = float(os.environ.get("SCALE_DOWN_THRESHOLD", "0.0"))  # Default to 0 req/s
+THREAD_POOL_SIZE = int(os.environ.get("THREAD_POOL_SIZE", str(MAX_CONCURRENCY * 2)))  # Default to 2x MAX_CONCURRENCY
 
 # Create a thread pool executor
-thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENCY)
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_SIZE)
 
 # Print configuration on startup
 print(f"Concurrency settings: MAX={MAX_CONCURRENCY}, MIN={MIN_CONCURRENCY}")
 print(f"Scaling thresholds: UP={SCALE_UP_THRESHOLD} req/s, DOWN={SCALE_DOWN_THRESHOLD} req/s")
+print(f"Thread pool size: {THREAD_POOL_SIZE}")
 
 async def handler(job):
     """
@@ -107,7 +109,6 @@ def concurrency_modifier(current_concurrency):
         print(f"Thread pool stats: Active threads: {thread_pool._work_queue.qsize()}, Threads in pool: {len(thread_pool._threads)}")
     
     # Use environment variable settings for concurrency thresholds
-    # More aggressive scaling to utilize our model pool
     if request_rate > SCALE_UP_THRESHOLD and current_concurrency < MAX_CONCURRENCY:
         # Request rate above threshold, increase concurrency
         return current_concurrency + 1
