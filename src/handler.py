@@ -5,8 +5,15 @@ This worker takes an array of texts and returns sparse, dense, and colbert vecto
 
 import runpod
 import asyncio
+import time
 from utils.validation import validate_input
 from model.embedding_processor import process_texts
+
+# Track metrics for concurrency adjustment
+last_request_time = time.time()
+request_count = 0
+request_rate = 0
+last_rate_update = time.time()
 
 async def handler(job):
     """
@@ -22,6 +29,11 @@ async def handler(job):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
+    # Update request metrics
+    global request_count, last_request_time
+    request_count += 1
+    last_request_time = time.time()
+    
     job_input = job["input"]
     
     # Validate input
@@ -50,5 +62,49 @@ async def handler(job):
     except Exception as e:
         return {"error": f"Error processing texts: {str(e)}"}
 
-# Start the serverless worker with the async handler directly
-runpod.serverless.start({"handler": handler})
+def concurrency_modifier(current_concurrency):
+    """
+    Dynamically adjusts the concurrency level based on the observed request rate.
+    
+    Args:
+        current_concurrency: The current concurrency level
+        
+    Returns:
+        The adjusted concurrency level
+    """
+    global request_count, last_rate_update, request_rate
+    
+    # Update request rate calculation every 10 seconds
+    current_time = time.time()
+    if current_time - last_rate_update >= 10:
+        # Calculate requests per second
+        time_diff = current_time - last_rate_update
+        if time_diff > 0:
+            request_rate = request_count / time_diff
+        
+        # Reset counters
+        request_count = 0
+        last_rate_update = current_time
+        
+        print(f"Current request rate: {request_rate:.2f} req/s, Concurrency: {current_concurrency}")
+    
+    # Define concurrency thresholds
+    max_concurrency = 10  # Maximum concurrent requests
+    min_concurrency = 1  # Minimum concurrency level
+    
+    # Adjust based on request rate
+    if request_rate > 2.0 and current_concurrency < max_concurrency:
+        # High request rate, increase concurrency
+        return current_concurrency + 1
+    elif request_rate < 0.5 and current_concurrency > min_concurrency:
+        # Low request rate, decrease concurrency
+        return current_concurrency - 1
+    
+    # No change needed
+    return current_concurrency
+
+# Start the serverless worker with the async handler and concurrency modifier
+runpod.serverless.start({
+    "handler": handler,
+    "concurrency_modifier": concurrency_modifier
+})
