@@ -88,16 +88,16 @@ def concurrency_modifier(current_concurrency):
         
         print(f"Current request rate: {request_rate:.2f} req/s, Concurrency: {current_concurrency}")
     
-    # Define concurrency thresholds
-    max_concurrency = 20  # Maximum concurrent requests
+    # Define concurrency thresholds - match with number of model instances
+    max_concurrency = 4  # Match with MAX_MODELS in model_loader.py
     min_concurrency = 1  # Minimum concurrency level
     
-    # Adjust based on request rate
-    if request_rate > 0.1 and current_concurrency < max_concurrency:
-        # High request rate, increase concurrency
+    # More aggressive scaling to utilize our model pool
+    if request_rate > 0.05 and current_concurrency < max_concurrency:
+        # Even low request rates should scale up to use available models
         return current_concurrency + 1
-    elif request_rate < 0.05 and current_concurrency > min_concurrency:
-        # Low request rate, decrease concurrency
+    elif request_rate == 0 and current_concurrency > min_concurrency:
+        # Only scale down if there are no requests
         return current_concurrency - 1
     
     # No change needed

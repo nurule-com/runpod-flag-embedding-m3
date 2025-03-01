@@ -76,7 +76,8 @@ If an error occurs, the worker returns a JSON response with an error message:
 
 ## Implementation Details
 
-- The BGE-M3 model is loaded once at startup and moved to GPU
+- Multiple BGE-M3 model instances are loaded at startup to maximize GPU utilization
+- **Concurrent request handling** with dynamic concurrency adjustment
 - **Asynchronous handler** for improved concurrency and efficiency
 - By default, all texts are processed in a single model call for maximum efficiency
 - Optional batch processing can be enabled by setting a positive `batchSize` value
@@ -90,6 +91,9 @@ If an error occurs, the worker returns a JSON response with an error message:
 ## Performance Considerations
 
 - The worker uses an asynchronous handler to improve concurrency
+- **Multiple model instances** are loaded to better utilize available GPU memory
+- The worker can handle multiple concurrent requests, each using a different model instance
+- Dynamic concurrency adjustment based on request rate
 - While the model inference itself is synchronous, the async implementation allows for better handling of multiple requests
 - By default, all texts are processed in a single model call, which is more efficient but requires more memory
 - Batch processing can be enabled by setting a positive `batchSize` value

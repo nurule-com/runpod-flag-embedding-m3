@@ -5,7 +5,7 @@ Handles processing texts and extracting embeddings.
 
 import numpy as np
 import asyncio
-from .model_loader import load_model
+from .model_loader import get_model
 
 async def process_texts(texts, is_passage=False, batch_size=0):
     """
@@ -19,8 +19,8 @@ async def process_texts(texts, is_passage=False, batch_size=0):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-    # Load the model
-    model = load_model()
+    # Get a model instance from the pool
+    model = get_model()
     
     results = []
     
