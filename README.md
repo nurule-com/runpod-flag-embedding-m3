@@ -77,6 +77,7 @@ If an error occurs, the worker returns a JSON response with an error message:
 ## Implementation Details
 
 - Multiple BGE-M3 model instances are loaded at startup to maximize GPU utilization
+- **Thread pool** for offloading model inference to separate threads
 - **Concurrent request handling** with dynamic concurrency adjustment
 - **Asynchronous handler** for improved concurrency and efficiency
 - By default, all texts are processed in a single model call for maximum efficiency
@@ -92,6 +93,7 @@ If an error occurs, the worker returns a JSON response with an error message:
 
 - The worker uses an asynchronous handler to improve concurrency
 - **Multiple model instances** are loaded to better utilize available GPU memory
+- **Thread pool** offloads CPU-intensive model inference to separate threads, bypassing Python's GIL limitations
 - The worker can handle multiple concurrent requests, each using a different model instance
 - Dynamic concurrency adjustment based on request rate
 - While the model inference itself is synchronous, the async implementation allows for better handling of multiple requests
@@ -110,7 +112,15 @@ The worker supports the following environment variables:
 - `MIN_CONCURRENCY`: Minimum number of concurrent requests the worker will maintain. Defaults to 1.
 - `SCALE_UP_THRESHOLD`: Request rate threshold (requests per second) above which concurrency will increase. Defaults to 0.05.
 - `SCALE_DOWN_THRESHOLD`: Request rate threshold (requests per second) below which concurrency will decrease. Defaults to 0.0.
+- `THREAD_POOL_SIZE`: Number of threads in the thread pool for offloading model inference. Defaults to 2 times MAX_CONCURRENCY.
 
+### Configuring for Different GPU Sizes
+
+| GPU Memory | Recommended MAX_MODELS | Notes |
+|------------|------------------------|-------|
+| 8GB        | 2                      | Conservative setting for smaller GPUs |
+| 16GB       | 4                      | Default setting, works well for most cases |
+| 24GB+      | 6-8                    | For high-end GPUs with more memory |
 
 ## Dependencies
 
@@ -118,6 +128,7 @@ The worker supports the following environment variables:
 - PyTorch
 - Transformers
 - FlagEmbedding
+- Hugging Face Hub and hf_transfer for fast model downloads
 
 ## Known Issues
 
