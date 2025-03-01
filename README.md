@@ -1,172 +1,119 @@
-<div align="center">
+# BGE-M3 Embedding Worker for RunPod
 
-<h1>Template | Worker</h1>
+This RunPod worker generates embeddings using the BGE-M3 model from FlagEmbedding. It takes an array of texts and returns three types of vectors for each text:
 
-[![CI | Test Handler](https://github.com/runpod-workers/worker-template/actions/workflows/CI-test_handler.yml/badge.svg)](https://github.com/runpod-workers/worker-template/actions/workflows/CI-test_handler.yml)
-&nbsp;
-[![CD | Build-Test-Release](https://github.com/runpod-workers/worker-template/actions/workflows/build-test-release.yml/badge.svg)](https://github.com/runpod-workers/worker-template/actions/workflows/build-test-release.yml)
+1. **Dense Embeddings**: Fixed-length, continuous representations
+2. **Sparse Embeddings**: High-dimensional but mostly zeros (lexical information)
+3. **ColBERT Embeddings**: Token-level embeddings for fine-grained matching
 
-🚀 | A simple worker that can be used as a starting point to build your own custom RunPod Endpoint API worker.
-</div>
+## Input Format
 
-## 📖 | Getting Started
-
-1. Clone this repository.
-2. (Optional) Add DockerHub credentials to GitHub Secrets.
-3. Add your code to the `src` directory.
-4. Update the `handler.py` file to load models and process requests.
-5. Add any dependencies to the `requirements.txt` file.
-6. Add any other build time scripts to the`builder` directory, for example, downloading models.
-7. Update the `Dockerfile` to include any additional dependencies.
-8. Replace the template `worker-config.json` file with your own (the template one is an example from our [vLLM worker](https://github.com/runpod-workers/worker-vllm)).
-
-### 🔧 | Worker Config
-
-The `worker-config.json` is a JSON file that is used to build the form that helps users configure their serverless endpoint on the RunPod Web Interface.
-
-Note: This is a new feature and only works for workers that use one model 
-
-<details>
-<summary>Writing your worker-config.json</summary>
-
-The JSON consists of two main parts, schema and versions.
-- `schema`: Here you specify the form fields that will be displayed to the user.
-  - `env_var_name`: The name of the environment variable that is being set using the form field.
-  - `value`: This is the default value of the form field. It will be shown in the UI as such unless the user changes it.
-  - `title`: This is the title of the form field in the UI.
-  - `description`: This is the description of the form field in the UI.
-  - `required`: This is a boolean that specifies if the form field is required.
-  - `type`: This is the type of the form field. Options are:
-    - `text`: Environment variable is a string so user inputs text in form field.
-    - `select`: User selects one option from the dropdown. You must provide the `options` key value pair after type if using this.
-    - `toggle`: User toggles between true and false.
-    - `number`: User inputs a number in the form field.
-  - `options`: Specify the options the user can select from if the type is `select`. DO NOT include this unless the `type` is `select`.
-- `versions`: This is where you call the form fields specified in `schema` and organize them into categories.
-  - `imageName`: This is the name of the Docker image that will be used to run the serverless endpoint.
-  - `minimumCudaVersion`: This is the minimum CUDA version that is required to run the serverless endpoint.
-  - `categories`: This is where you call the keys of the form fields specified in `schema` and organize them into categories. Each category is a toggle list of forms on the Web UI.
-    - `title`: This is the title of the category in the UI.
-    - `settings`: This is the array of settings schemas specified in `schema` associated with the category.
-
-<details>
-<summary>Example of schema</summary>
+The worker expects a JSON input with the following structure:
 
 ```json
 {
-  "schema": {
-    "TOKENIZER": {
-      "env_var_name": "TOKENIZER",
-      "value": "",
-      "title": "Tokenizer",
-      "description": "Name or path of the Hugging Face tokenizer to use.",
-      "required": false,
-      "type": "text"
-    }, 
-    "TOKENIZER_MODE": {
-      "env_var_name": "TOKENIZER_MODE",
-      "value": "auto",
-      "title": "Tokenizer Mode",
-      "description": "The tokenizer mode.",
-      "required": false,
-      "type": "select",
-      "options": [
-        { "value": "auto", "label": "auto" },
-        { "value": "slow", "label": "slow" }
-      ]
+  "texts": ["text1", "text2", "text3", ...],
+  "isPassage": false,
+  "batchSize": 8
+}
+```
+
+### Parameters
+
+- `texts`: Array of text strings to encode (required)
+- `isPassage`: Boolean flag indicating whether the texts are passages/documents (optional, defaults to `false`)
+  - `false`: Uses `encode_queries()` - optimized for short queries
+  - `true`: Uses `encode_corpus()` - optimized for longer passages/documents
+- `batchSize`: Number of texts to process in each batch (optional, defaults to `8`)
+  - Smaller batch sizes use less memory but may be slower
+  - Larger batch sizes are more efficient but require more memory
+
+## Output Format
+
+The worker returns a JSON response with the following structure:
+
+```json
+{
+  "results": [
+    {
+      "text": "text1",
+      "dense": [...],  // Dense vector representation
+      "sparse": {
+        "indexes": [...],  // Indices of non-zero elements (integers)
+        "values": [...]    // Values of non-zero elements (floats)
+      },
+      "colbert": [...]  // ColBERT token-level embeddings
     },
-    ...
-  }
+    // Results for other texts...
+  ]
 }
 ```
-</details>
 
-<details>
-<summary>Example of versions</summary>
+### Qdrant Compatibility
+
+The sparse vector format is compatible with Qdrant's requirements for sparse vectors. The format follows Qdrant's specification:
 
 ```json
 {
-  "versions": {
-    "0.5.4": {
-      "imageName": "runpod/worker-v1-vllm:v1.2.0stable-cuda12.1.0",
-      "minimumCudaVersion": "12.1",
-      "categories": [
-        {
-          "title": "LLM Settings",
-          "settings": [
-            "TOKENIZER", "TOKENIZER_MODE", "OTHER_SETTINGS_SCHEMA_KEYS_YOU_HAVE_SPECIFIED_0", ...
-          ]
-        },
-        {
-          "title": "Tokenizer Settings",
-          "settings": [
-            "OTHER_SETTINGS_SCHEMA_KEYS_0", "OTHER_SETTINGS_SCHEMA_KEYS_1", ...
-          ]
-        },
-        ...
-      ]
-    }
-  }
+  "indexes": [1, 3, 5, 7],  // Integer indices of non-zero elements
+  "values": [0.1, 0.2, 0.3, 0.4]  // Float values of non-zero elements
 }
 ```
-</details>
-</details>
 
+This allows you to directly use the sparse vectors with Qdrant's sparse vector search capabilities without any additional transformation.
 
+## Error Handling
 
-
-
-### ⚙️ | CI/CD (GitHub Actions)
-
-As a reference this repository provides example CI/CD workflows to help you test your worker and build a docker image. The three main workflows are:
-
-1. `CI-test_handler.yml` - Tests the handler using the input provided by the `--test_input` argument when calling the file containing your handler.
-
-### Test Handler
-
-This workflow will validate that your handler works as expected. You may need to add some dependency installations to the `CI-test_handler.yml` file to ensure your handler can be tested.
-
-The action expects the following arguments to be available:
-
-- `vars.RUNNER_24GB` | The endpoint ID on RunPod for a 24GB runner.
-- `secrets.RUNPOD_API_KEY` | Your RunPod API key.
-- `secrets.GH_PAT` | Your GitHub Personal Access Token.
-- `vars.GH_ORG` | The GitHub organization that owns the repository, this is where the runner will be added to.
-
-### Test End-to-End
-
-This repository is setup to automatically build and push a docker image to the GitHub Container Registry. You will need to add the following to the GitHub Secrets for this repository to enable this functionality:
-
-- `DOCKERHUB_USERNAME` | Your DockerHub username for logging in.
-- `DOCKERHUB_TOKEN` | Your DockerHub token for logging in.
-
-Additionally, the following need to be added as GitHub actions variables:
-
-- `DOCKERHUB_REPO` | The name of the repository you want to push to.
-- `DOCKERHUB_IMG` | The name of the image you want to push to.
-
-The `CD-docker_dev.yml` file will build the image and push it to the `dev` tag, while the `CD-docker_release.yml` file will build the image on releases and tag it with the release version.
-
-The `CI-test_worker.yml` file will test the worker using the input provided by the `--test_input` argument when calling the file containing your handler. Be sure to update this workflow to install any dependencies you need to run your tests.
-
-## Example Input
+If an error occurs, the worker returns a JSON response with an error message:
 
 ```json
 {
-    "input": {
-        "name": "John Doe"
-    }
+  "error": "Error message"
 }
 ```
 
-## 💡 | Best Practices
+## Implementation Details
 
-System dependency installation, model caching, and other shell tasks should be added to the `builder/setup.sh` this will allow you to easily setup your Dockerfile as well as run CI/CD tasks.
+- The BGE-M3 model is loaded once at startup and moved to GPU
+- Texts are processed in batches to optimize GPU utilization
+- Different encoding methods are used based on the text type:
+  - `encode_queries()` for short queries (default)
+  - `encode_corpus()` for longer passages/documents
+- All three embedding types (dense, sparse, and colbert) are explicitly requested
+- Robust error handling with fallbacks for missing embedding types
+- Results are converted to Python lists for JSON serialization
 
-Models should be part of your docker image, this can be accomplished by either copying them into the image or downloading them during the build process.
+## Environment Variables
 
-If using the input validation utility from the runpod python package, create a `schemas` python file where you can define the schemas, then import that file into your `handler.py` file.
+The worker supports the following environment variables:
 
-## 🔗 | Links
+- `GPU_DEVICE`: Specifies which GPU device to use (e.g., "cuda:0", "cuda:1"). Defaults to "cuda:0" if not specified.
 
-🐳 [Docker Container](https://hub.docker.com/r/runpod/serverless-hello-world)
+## Dependencies
+
+- RunPod SDK
+- PyTorch
+- Transformers
+- FlagEmbedding
+
+## Known Issues
+
+### FlagEmbedding Cleanup Error
+
+You may see the following error message when the worker completes a job:
+
+```
+Exception ignored in: <function AbsEmbedder.__del__ at 0x...>
+Traceback (most recent call last):
+  File ".../FlagEmbedding/abc/inference/AbsEmbedder.py", line 286, in __del__
+  File ".../FlagEmbedding/abc/inference/AbsEmbedder.py", line 94, in stop_self_pool
+TypeError: 'NoneType' object is not callable
+```
+
+This error occurs during Python's shutdown process when the `AbsEmbedder` class attempts to clean up resources that have already been garbage collected. This is a known issue with the FlagEmbedding library and does not affect the functionality or results of the worker. We've implemented a custom cleanup function using `atexit` to mitigate this issue.
+
+## References
+
+- [RunPod Serverless Documentation](https://docs.runpod.io/serverless/workers/handlers/overview)
+- [FlagEmbedding GitHub Repository](https://github.com/FlagOpen/FlagEmbedding)
+- [BGE-M3 Model](https://huggingface.co/BAAI/bge-m3)

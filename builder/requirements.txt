@@ -5,4 +5,13 @@
 # git+https://github.com/runpod/runpod-python.git
 # To learn more, see https://pip.pypa.io/en/stable/reference/requirements-file-format/
 
+# RunPod SDK
 runpod~=1.7.0
+
+# PyTorch and related libraries
+torch>=2.0.0
+transformers>=4.30.0
+numpy>=1.24.0
+
+# FlagEmbedding library for BGE-M3 model
+FlagEmbedding>=1.1.0
