@@ -39,7 +39,7 @@ The worker returns a JSON response with the following structure:
       "text": "text1",
       "dense": [...],  // Dense vector representation
       "sparse": {
-        "indexes": [...],  // Indices of non-zero elements (integers)
+        "indices": [...],  // Indices of non-zero elements (integers)
         "values": [...]    // Values of non-zero elements (floats)
       },
       "colbert": [...]  // ColBERT token-level embeddings
@@ -55,7 +55,7 @@ The sparse vector format is compatible with Qdrant's requirements for sparse vec
 
 ```json
 {
-  "indexes": [1, 3, 5, 7],  // Integer indices of non-zero elements
+  "indices": [1, 3, 5, 7],  // Integer indices of non-zero elements
   "values": [0.1, 0.2, 0.3, 0.4]  // Float values of non-zero elements
 }
 ```

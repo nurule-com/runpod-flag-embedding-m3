@@ -127,7 +127,7 @@ def process_texts(texts, is_passage=False, batch_size=8):
                                     values.append(weight)
                                 
                                 text_result["sparse"] = {
-                                    "indexes": indexes,
+                                    "indices": indexes,
                                     "values": values
                                 }
                             else:
@@ -145,14 +145,14 @@ def process_texts(texts, is_passage=False, batch_size=8):
                                 
                                 # Convert numpy types to Python native types for JSON serialization
                                 text_result["sparse"] = {
-                                    "indexes": nonzero_indices.tolist(),
+                                    "indices": nonzero_indices.tolist(),
                                     "values": [float(v) for v in nonzero_values.tolist()]
                                 }
                         else:
                             # Fallback if lexical_weights is not available
                             print(f"Warning: No lexical_weights found for text {j} in batch {i//batch_size}")
                             text_result["sparse"] = {
-                                "indexes": [],
+                                "indices": [],
                                 "values": []
                             }
                     except Exception as e:
@@ -161,7 +161,7 @@ def process_texts(texts, is_passage=False, batch_size=8):
                         print(f"Sparse weights: {sparse_weights}")
                         # Provide empty sparse embeddings as fallback
                         text_result["sparse"] = {
-                            "indexes": [],
+                            "indices": [],
                             "values": []
                         }
                     
