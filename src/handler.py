@@ -7,6 +7,7 @@ import os
 import runpod
 import numpy as np
 import atexit
+import asyncio
 from FlagEmbedding import BGEM3FlagModel
 
 # Load the BGE-M3 model outside the handler function
@@ -54,26 +55,37 @@ except Exception as e:
     print(f"Error loading model: {e}")
     raise
 
-def process_texts(texts, is_passage=False, batch_size=8):
+async def process_texts(texts, is_passage=False, batch_size=0):
     """
     Process a list of texts and return sparse, dense, and colbert embeddings for each.
     
     Args:
         texts: List of text strings to encode
         is_passage: Whether the texts are passages (True) or queries (False)
-        batch_size: Number of texts to process at once
+        batch_size: Number of texts to process at once. If 0 or negative, all texts are processed at once (default).
         
     Returns:
         List of dictionaries containing the embeddings for each text
     """
     results = []
     
-    # Process texts in batches to avoid memory issues
-    for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i:i+batch_size]
+    # Determine if we should use batches
+    use_batches = batch_size > 0
+    
+    if use_batches:
+        # Process texts in batches to avoid memory issues
+        batch_ranges = [(i, min(i + batch_size, len(texts))) for i in range(0, len(texts), batch_size)]
+    else:
+        # Process all texts at once
+        batch_ranges = [(0, len(texts))] if texts else []
+    
+    for start_idx, end_idx in batch_ranges:
+        batch_texts = texts[start_idx:end_idx]
         
         try:
             # Use the appropriate encoding method based on text type
+            # Note: The model encoding itself is not async, but we can make the function async
+            # to allow other async operations to run concurrently
             if is_passage:
                 # For passages/documents
                 embeddings = model.encode_corpus(
@@ -150,13 +162,13 @@ def process_texts(texts, is_passage=False, batch_size=8):
                                 }
                         else:
                             # Fallback if lexical_weights is not available
-                            print(f"Warning: No lexical_weights found for text {j} in batch {i//batch_size}")
+                            print(f"Warning: No lexical_weights found for text {j} in batch {start_idx//batch_size if use_batches else 0}")
                             text_result["sparse"] = {
                                 "indices": [],
                                 "values": []
                             }
                     except Exception as e:
-                        print(f"Warning: Error processing sparse embeddings for text {j} in batch {i//batch_size}: {e}")
+                        print(f"Warning: Error processing sparse embeddings for text {j} in batch {start_idx//batch_size if use_batches else 0}: {e}")
                         print(f"Sparse weights type: {type(sparse_weights)}")
                         print(f"Sparse weights: {sparse_weights}")
                         # Provide empty sparse embeddings as fallback
@@ -171,30 +183,33 @@ def process_texts(texts, is_passage=False, batch_size=8):
                     
                     results.append(text_result)
                 except Exception as e:
-                    print(f"Error processing text {j} in batch {i//batch_size}: {e}")
+                    print(f"Error processing text {j} in batch {start_idx//batch_size if use_batches else 0}: {e}")
                     print(f"Text: {text[:100]}...")
                     if "lexical_weights" in embeddings:
                         print(f"Lexical weights type: {type(embeddings['lexical_weights'])}")
                         print(f"Lexical weights shape: {np.array(embeddings['lexical_weights']).shape if isinstance(embeddings['lexical_weights'], (list, np.ndarray)) else 'Not array-like'}")
                     raise
         except Exception as e:
-            print(f"Error processing batch {i//batch_size}: {e}")
+            print(f"Error processing batch {start_idx//batch_size if use_batches else 0}: {e}")
             print(f"Batch texts: {[t[:50] + '...' for t in batch_texts]}")
             if "embeddings" in locals():
                 print(f"Embeddings keys: {embeddings.keys() if isinstance(embeddings, dict) else 'Not a dict'}")
             raise
+        
+        # Add a small delay to allow other async tasks to run if needed
+        await asyncio.sleep(0)
     
     return results
 
-def handler(job):
+async def handler(job):
     """
-    Handler function that processes incoming jobs.
+    Asynchronous handler function that processes incoming jobs.
     
     Expected input format:
     {
         "texts": ["text1", "text2", ...],
         "isPassage": false,  // Optional, defaults to false (query mode)
-        "batchSize": 8       // Optional, defaults to 8
+        "batchSize": 0       // Optional, defaults to 0 (no batching). Set to a positive number to enable batching.
     }
     
     Returns:
@@ -219,20 +234,19 @@ def handler(job):
     # Check if texts are passages or queries
     is_passage = job_input.get("isPassage", False)
     
-    # Get batch size
-    batch_size = job_input.get("batchSize", 8)
+    # Get batch size (0 means no batching, which is the default)
+    batch_size = job_input.get("batchSize", 0)
     
     try:
         # Process the texts
-        print(f"Processing {len(texts)} texts (isPassage={is_passage}, batchSize={batch_size})")
-        results = process_texts(texts, is_passage=is_passage, batch_size=batch_size)
+        batch_mode = "no batching" if batch_size <= 0 else f"batch size {batch_size}"
+        print(f"Processing {len(texts)} texts (isPassage={is_passage}, {batch_mode})")
+        results = await process_texts(texts, is_passage=is_passage, batch_size=batch_size)
         print(f"Successfully processed {len(results)} texts")
-
-        print(results)
         
         return {"results": results}
     except Exception as e:
         return {"error": f"Error processing texts: {str(e)}"}
 
-# Start the serverless worker
+# Start the serverless worker with async handler
 runpod.serverless.start({"handler": handler})

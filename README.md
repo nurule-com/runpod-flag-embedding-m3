@@ -14,7 +14,7 @@ The worker expects a JSON input with the following structure:
 {
   "texts": ["text1", "text2", "text3", ...],
   "isPassage": false,
-  "batchSize": 8
+  "batchSize": 0
 }
 ```
 
@@ -24,7 +24,9 @@ The worker expects a JSON input with the following structure:
 - `isPassage`: Boolean flag indicating whether the texts are passages/documents (optional, defaults to `false`)
   - `false`: Uses `encode_queries()` - optimized for short queries
   - `true`: Uses `encode_corpus()` - optimized for longer passages/documents
-- `batchSize`: Number of texts to process in each batch (optional, defaults to `8`)
+- `batchSize`: Number of texts to process in each batch (optional, defaults to `0`)
+  - `0` (default): Disables batching and processes all texts at once for maximum efficiency
+  - Positive values: Enables batch processing with the specified batch size
   - Smaller batch sizes use less memory but may be slower
   - Larger batch sizes are more efficient but require more memory
 
@@ -75,13 +77,24 @@ If an error occurs, the worker returns a JSON response with an error message:
 ## Implementation Details
 
 - The BGE-M3 model is loaded once at startup and moved to GPU
-- Texts are processed in batches to optimize GPU utilization
+- **Asynchronous handler** for improved concurrency and efficiency
+- By default, all texts are processed in a single model call for maximum efficiency
+- Optional batch processing can be enabled by setting a positive `batchSize` value
 - Different encoding methods are used based on the text type:
   - `encode_queries()` for short queries (default)
   - `encode_corpus()` for longer passages/documents
 - All three embedding types (dense, sparse, and colbert) are explicitly requested
 - Robust error handling with fallbacks for missing embedding types
 - Results are converted to Python lists for JSON serialization
+
+## Performance Considerations
+
+- The worker uses an asynchronous handler to improve concurrency
+- While the model inference itself is synchronous, the async implementation allows for better handling of multiple requests
+- By default, all texts are processed in a single model call, which is more efficient but requires more memory
+- Batch processing can be enabled by setting a positive `batchSize` value
+- The batch processing includes small async yields to prevent blocking the event loop
+- For very large numbers of texts, consider enabling batching or splitting into multiple API calls
 
 ## Environment Variables
 
