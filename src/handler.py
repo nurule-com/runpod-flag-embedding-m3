@@ -89,14 +89,14 @@ def concurrency_modifier(current_concurrency):
         print(f"Current request rate: {request_rate:.2f} req/s, Concurrency: {current_concurrency}")
     
     # Define concurrency thresholds
-    max_concurrency = 10  # Maximum concurrent requests
+    max_concurrency = 20  # Maximum concurrent requests
     min_concurrency = 1  # Minimum concurrency level
     
     # Adjust based on request rate
-    if request_rate > 2.0 and current_concurrency < max_concurrency:
+    if request_rate > 0.1 and current_concurrency < max_concurrency:
         # High request rate, increase concurrency
         return current_concurrency + 1
-    elif request_rate < 0.5 and current_concurrency > min_concurrency:
+    elif request_rate < 0.05 and current_concurrency > min_concurrency:
         # Low request rate, decrease concurrency
         return current_concurrency - 1
     
