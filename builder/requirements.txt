@@ -13,7 +13,7 @@ torch>=2.6.0
 numpy>=1.24.0
 
 # FlagEmbedding library for BGE-M3 model
-FlagEmbedding>=1.1.0
+FlagEmbedding>=1.3.4
 
 # Hugging Face Hub and fast download support
 huggingface_hub>=0.29.1
