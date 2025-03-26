@@ -68,9 +68,7 @@ async def handler(job):
         
         # Offload the CPU-intensive model inference to a separate thread
         # This allows the event loop to handle other requests while waiting for the model
-        loop = asyncio.get_event_loop()
-        results = await loop.run_in_executor(
-            thread_pool,
+        results = await asyncio.to_thread(
             process_texts_sync,
             result["texts"],
             result["is_passage"],
