@@ -60,7 +60,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         
         # Create a thread to process the batch
         batch_results = []
-        
+        stop_event = threading.Event()  # Event to signal the thread to stop
+
         def process_batch():
             nonlocal batch_results
             try:
@@ -82,6 +83,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 
                 # Process embeddings
                 for j, text in enumerate(batch_texts):
+                    if stop_event.is_set():  # Check if we should stop processing
+                        return
+                    
                     text_result = {
                         "text": text,
                         "dense": embeddings["dense_vecs"][j].tolist()
@@ -134,13 +138,11 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
         if thread.is_alive():
             print(f"Batch {batch_idx // batch_size} processing timed out.")
+            stop_event.set()  # Signal the thread to stop
             results.extend(
                 {"error": "Processing timed out", "text": text} 
                 for text in batch_texts
             )
-            # Optionally, you can terminate the thread if needed
-            # However, Python does not provide a safe way to kill threads.
-            # You may need to handle this differently based on your application needs.
         else:
             # If the thread finished successfully, add the results
             results.extend(batch_results)
