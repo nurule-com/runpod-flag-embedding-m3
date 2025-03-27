@@ -1,11 +1,11 @@
-"""
-Model loader for BGE-M3 embedding model.
-Handles loading the model and cleanup of resources.
-"""
-
 import os
 import atexit
+import logging
 from FlagEmbedding import BGEM3FlagModel
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Global model variable
 model = None
@@ -16,7 +16,7 @@ def get_model():
     If the model is not initialized, initialize it first.
     
     Returns:
-        The model instance
+        BGEM3FlagModel: The model instance
     """
     global model
     
@@ -38,33 +38,31 @@ def load_model():
     model_name = "BAAI/bge-m3"
     
     # Disable hf_transfer if the package is not available
-    # This prevents the error when HF_HUB_ENABLE_HF_TRANSFER=1 but hf_transfer is not installed
     if os.environ.get("HF_HUB_ENABLE_HF_TRANSFER") == "1":
         try:
             import hf_transfer
-            print("Using hf_transfer for fast downloads")
+            logger.info("Using hf_transfer for fast downloads")
         except ImportError:
-            print("hf_transfer package not found, disabling fast downloads")
+            logger.warning("hf_transfer package not found, disabling fast downloads")
             os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
     
     try:
-        print(f"Loading {model_name} model on {gpu_device}...")
+        logger.info(f"Loading {model_name} model on {gpu_device}...")
         
         # Use the specific FlagEmbedding implementation for BGE-M3
-        # Explicitly specify the GPU device to use
         model = BGEM3FlagModel(
             model_name, 
             use_fp16=True,
             device=gpu_device
         )
         
-        print(f"Successfully loaded {model_name} model on {gpu_device}")
+        logger.info(f"Successfully loaded {model_name} model on {gpu_device}")
         
         # Register the cleanup function to be called at exit
         atexit.register(cleanup_model)
         
     except Exception as e:
-        print(f"Error loading model: {e}")
+        logger.exception("Error loading model")
         raise
 
 def cleanup_model():
@@ -76,15 +74,12 @@ def cleanup_model():
     
     if model is not None:
         try:
-            # Access model attributes that might be needed during cleanup
-            # This prevents them from being garbage collected too early
-            if hasattr(model, '_pool') and model._pool is not None:
-                model._pool = None
-            if hasattr(model, '_tokenizer') and model._tokenizer is not None:
-                model._tokenizer = None
+            # Call cleanup method if it exists
+            if hasattr(model, 'cleanup'):
+                model.cleanup()
             
             # Set model to None to avoid further cleanup attempts
             model = None
-            print("Model resources cleaned up successfully")
+            logger.info("Model resources cleaned up successfully")
         except Exception as e:
-            print(f"Error during model cleanup: {e}") 
+            logger.exception("Error during model cleanup")

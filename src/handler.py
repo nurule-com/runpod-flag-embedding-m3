@@ -7,7 +7,6 @@ import logging
 from utils.validation import validate_input
 from model.embedding_processor import process_texts_sync
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

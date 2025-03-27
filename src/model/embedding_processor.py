@@ -3,11 +3,16 @@ Embedding processor for BGE-M3 model.
 Handles processing texts and extracting embeddings.
 """
 
+import threading
 import numpy as np
 import asyncio
-import time
-import logging
 from .model_loader import get_model
+
+class TimeoutException(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutException()
 
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
@@ -35,9 +40,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         tokenized = tokenizer(
             texts,
             truncation=True,
-            padding=False,  # We'll handle padding per-batch
-            return_attention_mask=False,
-            return_token_type_ids=False
+            padding=True,
+            return_attention_mask=True,
+            return_tensors="np"  # Return as numpy arrays
         )
         token_counts = [len(ids) for ids in tokenized["input_ids"]]
     except Exception as e:
@@ -53,78 +58,92 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
         batch_tokens = tokenized["input_ids"][batch_idx:batch_idx + batch_size]
         
-        try:
-            # Pad the batch efficiently
-            padded = tokenizer.pad(
-                {"input_ids": batch_tokens},
-                padding='max_length',  # Specify to pad to max length
-                max_length=512,
-                return_attention_mask=True,
-                return_tensors="np"
-            )
-            
-            # Use existing model methods for encoding
-            if is_passage:
-                embeddings = model.encode_corpus(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-            else:
-                embeddings = model.encode_queries(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-            
-            # Process embeddings
-            for j, text in enumerate(batch_texts):
-                text_result = {
-                    "text": text,
-                    "dense": embeddings["dense_vecs"][j].tolist()
-                }
-
-                # Process sparse embeddings
-                sparse_weights = embeddings.get("lexical_weights", [None])[j]
-                if sparse_weights is not None:
-                    if isinstance(sparse_weights, dict):
-                        indexes = []
-                        values = []
-                        for token_id, weight in sparse_weights.items():
-                            indexes.append(int(token_id))
-                            values.append(float(weight))
-                    else:
-                        # Handle array format
-                        sparse_weights = np.array(sparse_weights)
-                        nonzero = sparse_weights.nonzero()
-                        indexes = nonzero[0].tolist()
-                        values = sparse_weights[nonzero].tolist()
-                    
-                    text_result["sparse"] = {
-                        "indices": indexes,
-                        "values": values
-                    }
+        # Create a thread to process the batch
+        batch_results = []
+        
+        def process_batch():
+            nonlocal batch_results
+            try:
+                # Use existing model methods for encoding
+                if is_passage:
+                    embeddings = model.encode_corpus(
+                        batch_texts,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
                 else:
-                    text_result["sparse"] = {
-                        "indices": [],
-                        "values": []
+                    embeddings = model.encode_queries(
+                        batch_texts,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
+                
+                # Process embeddings
+                for j, text in enumerate(batch_texts):
+                    text_result = {
+                        "text": text,
+                        "dense": embeddings["dense_vecs"][j].tolist()
                     }
 
-                # Add ColBERT embeddings if available
-                if "colbert_vecs" in embeddings:
-                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
+                    # Process sparse embeddings
+                    sparse_weights = embeddings.get("lexical_weights", [None])[j]
+                    if sparse_weights is not None:
+                        if isinstance(sparse_weights, dict):
+                            indexes = []
+                            values = []
+                            for token_id, weight in sparse_weights.items():
+                                indexes.append(int(token_id))
+                                values.append(float(weight))
+                        else:
+                            # Handle array format
+                            sparse_weights = np.array(sparse_weights)
+                            nonzero = sparse_weights.nonzero()
+                            indexes = nonzero[0].tolist()
+                            values = sparse_weights[nonzero].tolist()
+                        
+                        text_result["sparse"] = {
+                            "indices": indexes,
+                            "values": values
+                        }
+                    else:
+                        text_result["sparse"] = {
+                            "indices": [],
+                            "values": []
+                        }
 
-                results.append(text_result)
-                
-        except Exception as e:
-            print(f"Batch {batch_idx//batch_size} failed: {str(e)}")
-            # Provide partial results with error indication
+                    # Add ColBERT embeddings if available
+                    if "colbert_vecs" in embeddings:
+                        text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
+
+                    batch_results.append(text_result)
+            except Exception as e:
+                print(f"Batch {batch_idx // batch_size} failed: {str(e)}")
+                batch_results.extend(
+                    {"error": "Processing failed", "text": text} 
+                    for text in batch_texts
+                )
+
+        # Start the thread
+        thread = threading.Thread(target=process_batch)
+        thread.start()
+        
+        # Wait for the thread to finish with a timeout
+        thread.join(timeout=4)  # Wait for 4 seconds
+
+        if thread.is_alive():
+            print(f"Batch {batch_idx // batch_size} processing timed out.")
             results.extend(
-                {"error": "Processing failed", "text": text} 
+                {"error": "Processing timed out", "text": text} 
                 for text in batch_texts
             )
+            # Optionally, you can terminate the thread if needed
+            # However, Python does not provide a safe way to kill threads.
+            # You may need to handle this differently based on your application needs.
+        else:
+            # If the thread finished successfully, add the results
+            results.extend(batch_results)
 
     return results
 
