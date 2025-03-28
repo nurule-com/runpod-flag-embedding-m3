@@ -26,4 +26,9 @@ RUN python3.11 -m pip install --upgrade pip && \
 # Add src files (Worker Template)
 ADD src .
 
+# Download BGE-M3 model during build time to cache it in the container image
+COPY builder/download_model.py /download_model.py
+RUN python3.11 -u /download_model.py && \
+    rm /download_model.py
+
 CMD python3.11 -u /handler.py
