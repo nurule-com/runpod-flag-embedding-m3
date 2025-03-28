@@ -7,6 +7,14 @@ import threading
 import numpy as np
 import asyncio
 from .model_loader import get_model
+from runpod import RunPodLogger
+
+RED = "\033[91m"
+GREEN = "\033[92m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
+logger = RunPodLogger()
 
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
@@ -87,7 +95,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             indexes = []
                             values = []
                             for token_id, weight in sparse_weights.items():
+                                logger.info(f"{BLUE}Processing {batch_texts} {j}{RESET}")
                                 if stop_event.is_set():  # Check if we should stop processing
+                                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                                     return
                                 indexes.append(int(token_id))
                                 values.append(float(weight))
@@ -119,6 +129,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     {"error": "Processing failed", "text": text} 
                     for text in batch_texts
                 )
+
+        logger.info(f"{GREEN}Processing {batch_texts}{RESET}")
 
         # Start the thread
         thread = threading.Thread(target=process_batch)
