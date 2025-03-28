@@ -8,12 +8,6 @@ import numpy as np
 import asyncio
 from .model_loader import get_model
 
-class TimeoutException(Exception):
-    pass
-
-def timeout_handler(signum, frame):
-    raise TimeoutException()
-
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
     Synchronous version of process_texts for use with thread pools.
@@ -27,9 +21,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-    model = get_model()  # Get the model instance
-    tokenizer = model.tokenizer  # Assuming the model has access to the tokenizer
-    
+    model = get_model()
+    tokenizer = model.tokenizer
     results = []
     
     if not texts:
@@ -42,7 +35,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             truncation=True,
             padding=True,
             return_attention_mask=True,
-            return_tensors="np"  # Return as numpy arrays
+            return_tensors="np"
         )
         token_counts = [len(ids) for ids in tokenized["input_ids"]]
     except Exception as e:
@@ -56,7 +49,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     # Process in optimized batches
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
-        batch_tokens = tokenized["input_ids"][batch_idx:batch_idx + batch_size]
         
         # Create a thread to process the batch
         batch_results = []
@@ -83,9 +75,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 
                 # Process embeddings
                 for j, text in enumerate(batch_texts):
-                    if stop_event.is_set():  # Check if we should stop processing
-                        return
-                    
                     text_result = {
                         "text": text,
                         "dense": embeddings["dense_vecs"][j].tolist()
@@ -98,6 +87,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             indexes = []
                             values = []
                             for token_id, weight in sparse_weights.items():
+                                if stop_event.is_set():  # Check if we should stop processing
+                                    return
                                 indexes.append(int(token_id))
                                 values.append(float(weight))
                         else:
