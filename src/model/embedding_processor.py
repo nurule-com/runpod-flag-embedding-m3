@@ -4,6 +4,7 @@ Handles processing texts and extracting embeddings.
 """
 
 import threading
+import time
 import numpy as np
 import asyncio
 from .model_loader import get_model
@@ -29,6 +30,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
+
+    # Start timing
+    start_time = time.time()
+
     model = get_model()
     tokenizer = model.tokenizer
     results = []
@@ -105,8 +110,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             values = sparse_weights[nonzero].tolist()
                         
                         if stop_event.is_set():  # Check if we should stop processing
-                                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
-                                    return
+                            logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                            return
                         
                         text_result["sparse"] = {
                             "indices": indexes,
@@ -139,7 +144,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     for text in batch_texts
                 )
 
-        logger.info(f"{GREEN}Processing {batch_texts}{RESET}")
+        logger.info(f"{GREEN}Process started{RESET}")
 
         # Start the thread
         thread = threading.Thread(target=process_batch)
@@ -158,6 +163,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         else:
             # If the thread finished successfully, add the results
             results.extend(batch_results)
+
+    elapsed_time = time.time() - start_time
+    logger.info(f"{GREEN}Elapsed time: {elapsed_time:.2f} seconds{RESET}")
 
     return results
 
