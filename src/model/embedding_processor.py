@@ -3,7 +3,6 @@ Embedding processor for BGE-M3 model.
 Handles processing texts and extracting embeddings.
 """
 
-import threading
 import time
 import numpy as np
 import asyncio
@@ -68,8 +67,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
         def process_batch():
             global bool_stop
-
-            logger.info(f"{GREEN}Time: {time.time() - start_time:.2f} seconds{RESET}")
             nonlocal batch_results
             try:
                 # Use existing model methods for encoding
@@ -91,7 +88,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 # Process embeddings
                 for j, text in enumerate(batch_texts):
 
-                    if (time.time() - start_time) > 1:  # Check if we should stop processing
+                    if (time.time() - start_time) > 3:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                         bool_stop = True
                         return
@@ -110,7 +107,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             for token_id, weight in sparse_weights.items():
                                 indexes.append(int(token_id))
                                 values.append(float(weight))
-                                if (time.time() - start_time) > 1:  # Check if we should stop processing
+                                if (time.time() - start_time) > 3:  # Check if we should stop processing
                                     logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                                     bool_stop = True
                                     return
@@ -121,7 +118,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             indexes = nonzero[0].tolist()
                             values = sparse_weights[nonzero].tolist()
                         
-                        if (time.time() - start_time) > 1:  # Check if we should stop processing
+                        if (time.time() - start_time) > 3:  # Check if we should stop processing
                             logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                             bool_stop = True
                             return
@@ -138,7 +135,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
                     logger.info(f"{GREEN}Time: {time.time() - start_time:.2f} seconds{RESET}")
 
-                    if (time.time() - start_time) > 1:  # Check if we should stop processing
+                    if (time.time() - start_time) > 3:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                         bool_stop = True
                         return
@@ -147,14 +144,14 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     if "colbert_vecs" in embeddings:
                         text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
 
-                    if (time.time() - start_time) > 1:  # Check if we should stop processing
+                    if (time.time() - start_time) > 3:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                         bool_stop = True
                         return
 
                     batch_results.append(text_result)
 
-                    if (time.time() - start_time) > 1:  # Check if we should stop processing
+                    if (time.time() - start_time) >3:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                         bool_stop = True
                         return
@@ -168,8 +165,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
         process_batch()
 
-        logger.info(f"{GREEN}Main thread continue time: {time.time() - start_time:.2f} seconds{RESET}")
-
         if bool_stop:
             print(f"Batch {batch_idx // batch_size} processing timed out.")
             results.extend(
@@ -179,8 +174,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         else:
             # If the function finished successfully, add the results
             results.extend(batch_results)
-
-    logger.info(f"{GREEN}Final time: {time.time() - start_time:.2f} seconds{RESET}")
 
     return results
 
