@@ -30,7 +30,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-
+    bool_stop = False
     # Start timing
     start_time = time.time()
 
@@ -65,9 +65,11 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         
         # Create a thread to process the batch
         batch_results = []
-        stop_event = threading.Event()  # Event to signal the thread to stop
 
         def process_batch():
+            global bool_stop
+
+            logger.info(f"{GREEN}Time: {time.time() - start_time:.2f} seconds{RESET}")
             nonlocal batch_results
             try:
                 # Use existing model methods for encoding
@@ -88,6 +90,12 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 
                 # Process embeddings
                 for j, text in enumerate(batch_texts):
+
+                    if (time.time() - start_time) > 1:  # Check if we should stop processing
+                        logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        bool_stop = True
+                        return
+
                     text_result = {
                         "text": text,
                         "dense": embeddings["dense_vecs"][j].tolist()
@@ -102,6 +110,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             for token_id, weight in sparse_weights.items():
                                 indexes.append(int(token_id))
                                 values.append(float(weight))
+                                if (time.time() - start_time) > 1:  # Check if we should stop processing
+                                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                                    bool_stop = True
+                                    return
                         else:
                             # Handle array format
                             sparse_weights = np.array(sparse_weights)
@@ -109,8 +121,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             indexes = nonzero[0].tolist()
                             values = sparse_weights[nonzero].tolist()
                         
-                        if stop_event.is_set():  # Check if we should stop processing
+                        if (time.time() - start_time) > 1:  # Check if we should stop processing
                             logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                            bool_stop = True
                             return
                         
                         text_result["sparse"] = {
@@ -125,22 +138,25 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
                     logger.info(f"{GREEN}Time: {time.time() - start_time:.2f} seconds{RESET}")
 
-                    if stop_event.is_set():  # Check if we should stop processing
+                    if (time.time() - start_time) > 1:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        bool_stop = True
                         return
 
                     # Add ColBERT embeddings if available
                     if "colbert_vecs" in embeddings:
                         text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
 
-                    if stop_event.is_set():  # Check if we should stop processing
+                    if (time.time() - start_time) > 1:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        bool_stop = True
                         return
 
                     batch_results.append(text_result)
 
-                    if stop_event.is_set():  # Check if we should stop processing
+                    if (time.time() - start_time) > 1:  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        bool_stop = True
                         return
 
             except Exception as e:
@@ -150,24 +166,18 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     for text in batch_texts
                 )
 
-        # Start the thread
-        thread = threading.Thread(target=process_batch)
-        thread.start()
-        
-        # Wait for the thread to finish with a timeout
-        thread.join(timeout=4)  # Wait for 4 seconds
+        process_batch()
 
         logger.info(f"{GREEN}Main thread continue time: {time.time() - start_time:.2f} seconds{RESET}")
 
-        if thread.is_alive():
+        if bool_stop:
             print(f"Batch {batch_idx // batch_size} processing timed out.")
-            stop_event.set()  # Signal the thread to stop
             results.extend(
                 {"error": "Processing timed out", "text": text} 
                 for text in batch_texts
             )
         else:
-            # If the thread finished successfully, add the results
+            # If the function finished successfully, add the results
             results.extend(batch_results)
 
     logger.info(f"{GREEN}Final time: {time.time() - start_time:.2f} seconds{RESET}")
