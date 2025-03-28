@@ -95,10 +95,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             indexes = []
                             values = []
                             for token_id, weight in sparse_weights.items():
-                                logger.info(f"{BLUE}Processing {batch_texts} {j}{RESET}")
-                                if stop_event.is_set():  # Check if we should stop processing
-                                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
-                                    return
                                 indexes.append(int(token_id))
                                 values.append(float(weight))
                         else:
@@ -107,6 +103,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             nonzero = sparse_weights.nonzero()
                             indexes = nonzero[0].tolist()
                             values = sparse_weights[nonzero].tolist()
+                        
+                        if stop_event.is_set():  # Check if we should stop processing
+                                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                                    return
                         
                         text_result["sparse"] = {
                             "indices": indexes,
@@ -118,11 +118,20 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             "values": []
                         }
 
+                    if stop_event.is_set():  # Check if we should stop processing
+                        logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        return
+
                     # Add ColBERT embeddings if available
                     if "colbert_vecs" in embeddings:
                         text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
 
+                    if stop_event.is_set():  # Check if we should stop processing
+                        logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        return
+
                     batch_results.append(text_result)
+
             except Exception as e:
                 print(f"Batch {batch_idx // batch_size} failed: {str(e)}")
                 batch_results.extend(
