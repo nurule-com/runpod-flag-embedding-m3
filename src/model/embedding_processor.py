@@ -123,6 +123,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                             "values": []
                         }
 
+                    logger.info(f"{GREEN}Time: {time.time() - start_time:.2f} seconds{RESET}")
+
                     if stop_event.is_set():  # Check if we should stop processing
                         logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
                         return
@@ -137,6 +139,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
                     batch_results.append(text_result)
 
+                    if stop_event.is_set():  # Check if we should stop processing
+                        logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
+                        return
+
             except Exception as e:
                 print(f"Batch {batch_idx // batch_size} failed: {str(e)}")
                 batch_results.extend(
@@ -144,14 +150,14 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     for text in batch_texts
                 )
 
-        logger.info(f"{GREEN}Process started{RESET}")
-
         # Start the thread
         thread = threading.Thread(target=process_batch)
         thread.start()
         
         # Wait for the thread to finish with a timeout
         thread.join(timeout=4)  # Wait for 4 seconds
+
+        logger.info(f"{GREEN}Main thread continue time: {time.time() - start_time:.2f} seconds{RESET}")
 
         if thread.is_alive():
             print(f"Batch {batch_idx // batch_size} processing timed out.")
@@ -164,8 +170,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             # If the thread finished successfully, add the results
             results.extend(batch_results)
 
-    elapsed_time = time.time() - start_time
-    logger.info(f"{GREEN}Elapsed time: {elapsed_time:.2f} seconds{RESET}")
+    logger.info(f"{GREEN}Final time: {time.time() - start_time:.2f} seconds{RESET}")
 
     return results
 
