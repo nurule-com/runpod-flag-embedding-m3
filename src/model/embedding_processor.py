@@ -82,13 +82,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 )
 
             for j, text in enumerate(batch_texts):
-                """
-                if (time.time() - start_time) > 1:  # Check if we should stop processing
-                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
-                    bool_stop = True
-                    break
-                """
                 
+
                 text_result = {
                     "text": text,
                     "dense": embeddings["dense_vecs"][j].tolist()
