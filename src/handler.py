@@ -44,8 +44,6 @@ async def handler(job):
     
     if result["empty"]:
         return {"results": []}
-
-    batch_mode = "no batching" if result["batch_size"] <= 0 else f"batch size {result['batch_size']}"
     
     try:
         # Offload the CPU-intensive model inference to a separate thread
