@@ -32,7 +32,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         List of dictionaries containing the embeddings for each text
     """
     bool_stop = False
-    start_time = time.time()
 
     model = get_model_instance()
     tokenizer = model.tokenizer
@@ -100,6 +99,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                         "indices": [],
                         "values": []
                     }
+
+                # Add colbert embeddings if available
+                if "colbert_vecs" in embeddings:
+                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
 
                 batch_results.append(text_result)
 
@@ -200,7 +203,3 @@ def process_sparse_weights(sparse_weights):
         values = [float(v) for v in nonzero_values.tolist()]
 
     return indexes, values
-
-# Example usage
-# results_sync = process_texts_sync(texts, is_passage=True, batch_size=32)
-# results_async = await process_texts(texts, is_passage=True, batch_size=32)
