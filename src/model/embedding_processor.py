@@ -106,6 +106,10 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                         "values": []
                     }
 
+                # Add colbert embeddings if available
+                if "colbert_vecs" in embeddings:
+                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
+
                 batch_results.append(text_result)
 
             if bool_stop:
