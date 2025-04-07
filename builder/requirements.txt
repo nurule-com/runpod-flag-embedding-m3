@@ -6,7 +6,7 @@
 # To learn more, see https://pip.pypa.io/en/stable/reference/requirements-file-format/
 
 # RunPod SDK
-runpod>=1.7.0
+runpod==1.7.0
 
 # PyTorch and related libraries
 torch>=2.6.0
