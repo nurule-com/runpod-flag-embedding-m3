@@ -1,9 +1,10 @@
+import multiprocessing
 import time
 import numpy as np
 import asyncio
 from .model_loader import get_model
 from runpod import RunPodLogger
-
+import os
 RED = "\033[91m"
 GREEN = "\033[92m"
 BLUE = "\033[94m"
@@ -18,6 +19,33 @@ def get_model_instance():
         model_instance = get_model()
     return model_instance
 
+def process_text_worker(text, embeddings, j):
+    text_result = {
+        "text": text,
+        "dense": embeddings["dense_vecs"][j].tolist()
+    }
+
+    # Process sparse embeddings
+    sparse_weights = embeddings.get("lexical_weights", [None])[j]
+    if sparse_weights is not None:
+        indexes, values = process_sparse_weights(sparse_weights)
+        text_result["sparse"] = {
+            "indices": indexes,
+            "values": values
+        }
+    else:
+        text_result["sparse"] = {
+            "indices": [],
+            "values": []
+        }
+
+    print("Logical cores:", os.cpu_count())
+
+    # Add colbert embeddings if available
+    if "colbert_vecs" in embeddings:
+        text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
+    return text_result
+
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
     Synchronous version of process_texts for use with thread pools.
@@ -31,9 +59,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-    bool_stop = False
-    start_time = time.time()
-
     model = get_model_instance()
     tokenizer = model.tokenizer
     results = []
@@ -81,42 +106,12 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     return_colbert_vecs=True
                 )
 
-            for j, text in enumerate(batch_texts):
-                if (time.time() - start_time) > 1:  # Check if we should stop processing
-                    logger.error(f"{RED}Stopping processing {batch_texts} {j}{RESET}")
-                    bool_stop = True
-                    break
-
-                text_result = {
-                    "text": text,
-                    "dense": embeddings["dense_vecs"][j].tolist()
-                }
-
-                # Process sparse embeddings
-                sparse_weights = embeddings.get("lexical_weights", [None])[j]
-                if sparse_weights is not None:
-                    indexes, values = process_sparse_weights(sparse_weights)
-                    text_result["sparse"] = {
-                        "indices": indexes,
-                        "values": values
-                    }
-                else:
-                    text_result["sparse"] = {
-                        "indices": [],
-                        "values": []
-                    }
-
-                # Add colbert embeddings if available
-                if "colbert_vecs" in embeddings:
-                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
-
-                batch_results.append(text_result)
-
-            if bool_stop:
-                logger.error(f"Batch {batch_idx // batch_size} processing timed out.")
-                results.extend({"error": "Processing timed out", "text": text} for text in batch_texts)
-            else:
-                results.extend(batch_results)
+            with multiprocessing.Pool(processes=30) as pool:
+                batch_results = pool.starmap(
+                    process_text_worker,
+                    [(text, embeddings, j) for j, text in enumerate(batch_texts)]
+                )
+            results.extend(batch_results)
 
         except Exception as e:
             logger.error(f"Batch {batch_idx // batch_size} failed: {str(e)}")

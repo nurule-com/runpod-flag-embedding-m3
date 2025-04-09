@@ -21,3 +21,6 @@ hf_transfer>=0.1.9
 
 # Async support
 aiohttp>=3.8.0
+
+# multiprocessing
+multiprocessing>=0.0.0
