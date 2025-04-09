@@ -1,7 +1,7 @@
 import multiprocessing
-import time
 import numpy as np
 import asyncio
+import psutil
 from .model_loader import get_model
 from runpod import RunPodLogger
 import os
@@ -9,6 +9,11 @@ RED = "\033[91m"
 GREEN = "\033[92m"
 BLUE = "\033[94m"
 RESET = "\033[0m"
+
+# Configured via environment variables
+POOL_SIZE = min(os.cpu_count() - 1, 32) if os.cpu_count() else 4  # Safer default
+MAX_BATCH_MEMORY_RATIO = 0.5  # Use at most 50% of available memory
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "16"))  # Configurable default
 
 logger = RunPodLogger()
 model_instance = None
@@ -39,12 +44,18 @@ def process_text_worker(text, embeddings, j):
             "values": []
         }
 
-    print("Logical cores:", os.cpu_count())
-
     # Add colbert embeddings if available
     if "colbert_vecs" in embeddings:
         text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
     return text_result
+
+def calculate_safe_batch_size(token_counts, available_mem):
+    """Dynamic batch sizing with memory constraints"""
+    max_token_len = max(token_counts) if token_counts else 1
+    approx_mem_per_token = 768 * 4  # Example estimation, adjust based on model
+    safe_size = int((available_mem * MAX_BATCH_MEMORY_RATIO) / 
+                   (max_token_len * approx_mem_per_token))
+    return max(1, min(safe_size, BATCH_SIZE))  # Constrained
 
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
@@ -60,7 +71,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         List of dictionaries containing the embeddings for each text
     """
     model = get_model_instance()
-    tokenizer = model.tokenizer
     results = []
     
     if not texts:
@@ -68,7 +78,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
     try:
         # Tokenize all texts first for optimal batching
-        tokenized = tokenizer(
+        tokenized = model.tokenizer(
             texts,
             truncation=True,
             padding=True,
@@ -80,42 +90,58 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         logger.error(f"Tokenization failed: {str(e)}")
         return [{"error": "Text processing failed"} for _ in texts]
 
-    # Determine batch size if not provided
-    if batch_size <= 0:
-        batch_size = max(1, 512 // max(token_counts)) if token_counts else 1
-    
-    # Process in optimized batches
-    for batch_idx in range(0, len(texts), batch_size):
-        batch_texts = texts[batch_idx:batch_idx + batch_size]
-        batch_results = []
+    available_mem = psutil.virtual_memory().available / (1024 ** 2)  # MB
+    dynamic_batch_size = calculate_safe_batch_size(token_counts, available_mem)
+    batch_size = dynamic_batch_size if batch_size <=0 else batch_size
 
-        try:
-            # Use existing model methods for encoding
-            if is_passage:
-                embeddings = model.encode_corpus(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-            else:
-                embeddings = model.encode_queries(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
+    # Reusable pool with limited size
+    with multiprocessing.Pool(processes=POOL_SIZE) as pool:
+        for batch_idx in range(0, len(texts), batch_size):
+            batch_texts = texts[batch_idx:batch_idx + batch_size]
+            
+            try:
+                # Memory check before processing
+                if psutil.virtual_memory().percent > 90:
+                    logger.warning("Memory pressure - reducing batch size")
+                    batch_size = max(1, batch_size // 2)
+                    continue
 
-            with multiprocessing.Pool(processes=30) as pool:
+                # Model encoding
+                if is_passage:
+                    embeddings = model.encode_corpus(
+                        batch_texts,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
+                else:
+                    embeddings = model.encode_queries(
+                        batch_texts,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
+
+                # Chunked processing
+                chunk_size = max(1, len(batch_texts) // POOL_SIZE)
                 batch_results = pool.starmap(
                     process_text_worker,
-                    [(text, embeddings, j) for j, text in enumerate(batch_texts)]
+                    [(text, embeddings, j) for j, text in enumerate(batch_texts)],
+                    chunksize=chunk_size
                 )
-            results.extend(batch_results)
+                results.extend(batch_results)
 
-        except Exception as e:
-            logger.error(f"Batch {batch_idx // batch_size} failed: {str(e)}")
-            results.extend({"error": "Processing failed", "text": text} for text in batch_texts)
+                # Memory cleanup
+                del embeddings
+                if batch_idx % 10 == 0:
+                    import gc; gc.collect()
+
+            except MemoryError:
+                logger.error("OOM detected - halting processing")
+                raise
+            except Exception as e:
+                logger.error(f"Batch failed: {str(e)[:200]}")
+                results.extend({"error": "Processing failed", "text": text} for text in batch_texts)
 
     return results
 
@@ -204,7 +230,3 @@ def process_sparse_weights(sparse_weights):
         values = [float(v) for v in nonzero_values.tolist()]
 
     return indexes, values
-
-# Example usage
-# results_sync = process_texts_sync(texts, is_passage=True, batch_size=32)
-# results_async = await process_texts(texts, is_passage=True, batch_size=32)
