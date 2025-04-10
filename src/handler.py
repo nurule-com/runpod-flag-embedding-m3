@@ -1,3 +1,6 @@
+import json
+import math
+import multiprocessing
 import runpod
 import asyncio
 import time
@@ -5,7 +8,7 @@ import os
 import concurrent.futures
 import logging
 from utils.validation import validate_input
-from model.embedding_processor import process_texts_sync
+from model.embedding_processor import GREEN, RED, RESET, process_texts_sync
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,6 +40,8 @@ async def handler(job):
     
     job_input = job["input"]
     
+    cores = 30
+
     # Validate input
     is_valid, result = validate_input(job_input)
     if not is_valid:
@@ -46,18 +51,31 @@ async def handler(job):
         return {"results": []}
     
     try:
-        # Offload the CPU-intensive model inference to a separate thread
-        results = await asyncio.get_event_loop().run_in_executor(
-            thread_pool,
-            process_texts_sync,
-            result["texts"],
-            result["is_passage"],
-            result["batch_size"]
-        )
-        return {"results": results}
+        with multiprocessing.Pool(cores) as pool:
+            # Split work into chunks
+            args_list = [
+                (result["texts"][start:end], result["is_passage"], result["batch_size"])
+                for start, end in generate_chunks(len(result["texts"]), cores)
+            ]
+
+            # Process all chunks in parallel
+            results = pool.starmap(process_texts_sync, args_list)
+
+        return {"results": json.dumps(results)}
+    
     except Exception as e:
-        logger.error(f"Error processing texts: {str(e)}")
-        return {"error": f"Error processing texts: {str(e)}"}
+        logger.error(f"Error: {str(e)}")
+        return {"error": str(e)}
+
+def generate_chunks(total_items: int, num_chunks: int):
+    """Split a list into `num_chunks` roughly equal segments."""
+    chunk_size = math.ceil(total_items / num_chunks)
+    for i in range(num_chunks):
+        start = i * chunk_size
+        end = min(start + chunk_size, total_items)
+        yield (start, end)
+        if end >= total_items:
+            break
 
 def concurrency_modifier(current_concurrency):
     global request_count, last_rate_update, request_rate

@@ -1,3 +1,5 @@
+from collections import defaultdict
+import json
 import math
 import multiprocessing
 import os
@@ -25,32 +27,6 @@ def get_model_instance():
     if model_instance is None:
         model_instance = get_model()
     return model_instance
-
-def process_text_worker(text, embeddings, results, j):
-    text_result = {
-        "text": text,
-        "dense": embeddings["dense_vecs"].tolist()
-    }
-
-    # Process sparse embeddings
-    sparse_weights = embeddings.get("lexical_weights", [None])
-    if sparse_weights is not None:
-        indexes, values = process_sparse_weights(sparse_weights)
-        text_result["sparse"] = {
-            "indices": indexes,
-            "values": values
-        }
-    else:
-        text_result["sparse"] = {
-            "indices": [],
-            "values": []
-        }
-
-    # Add colbert embeddings if available
-    if "colbert_vecs" in embeddings:
-        text_result["colbert"] = embeddings["colbert_vecs"].tolist()
-
-    results[j] = text_result
 
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
@@ -84,51 +60,80 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         token_counts = [len(ids) for ids in tokenized["input_ids"]]
     except Exception as e:
         logger.error(f"Tokenization failed: {str(e)}")
-        return [{"error": "Text processing failed"} for _ in texts]
-
+        return [{"error": "Tokenization failed", "text": text} for text in texts]
 
     # Determine batch size if not provided
     if batch_size <= 0:
-        batch_size = max(1, 512 // max(token_counts)) if token_counts else 1
-    
+        max_token_count = max(token_counts) if token_counts else 1
+        batch_size = max(1, 512 // max_token_count) if max_token_count > 0 else 512
+
     # Process in optimized batches
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
-        start_time = time.time()
+        if not batch_texts:
+            continue
         try:
-            manager = multiprocessing.Manager()
-            results = manager.list([None] * len(batch_texts))
-            processes = []
-            for i, text in enumerate(batch_texts):
-                # Use existing model methods for encoding
-                if is_passage:
-                    embeddings = model.encode_corpus(
-                        text,
-                        return_dense=True,
-                        return_sparse=True,
-                        return_colbert_vecs=True
-                    )
+            # Use existing model methods for encoding
+            if is_passage:
+                embeddings = model.encode_corpus(
+                    batch_texts,
+                    return_dense=True,
+                    return_sparse=True,
+                    return_colbert_vecs=True
+                )
+            else:
+                embeddings = model.encode_queries(
+                    batch_texts,
+                    return_dense=True,
+                    return_sparse=True,
+                    return_colbert_vecs=True
+                )
+
+            # Iterate through the texts *and their corresponding embeddings* in the current batch
+            for j, text in enumerate(batch_texts):
+                # Check if embeddings were generated successfully for this index
+                if not embeddings or "dense_vecs" not in embeddings or j >= len(embeddings["dense_vecs"]):
+                    logger.error(f"Missing dense_vecs for index {j} in batch starting at {batch_idx}")
+                    results.append({"error": "Embedding generation failed", "text": text})
+                    continue
+
+                text_result = {
+                    "text": text,
+                    # Access the embedding for the specific text using index j
+                    "dense": embeddings["dense_vecs"][j].tolist()
+                }
+
+                # Process sparse embeddings for the specific text using index j
+                sparse_weights = None
+                if "lexical_weights" in embeddings and embeddings["lexical_weights"] is not None and j < len(embeddings["lexical_weights"]):
+                    sparse_weights = embeddings["lexical_weights"][j]
+
+                if sparse_weights is not None:
+                    indexes, values = process_sparse_weights(sparse_weights)
+                    text_result["sparse"] = {
+                        "indices": indexes,
+                        "values": values
+                    }
                 else:
-                    embeddings = model.encode_queries(
-                        text,
-                        return_dense=True,
-                        return_sparse=True,
-                        return_colbert_vecs=True
-                    )
+                    text_result["sparse"] = {
+                        "indices": [],
+                        "values": []
+                    }
 
-                    p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings, results, i))
-                    processes.append(p)
-                    p.start()
+                # Add colbert embeddings if available for the specific text using index j
+                if "colbert_vecs" in embeddings and embeddings["colbert_vecs"] is not None and j < len(embeddings["colbert_vecs"]):
+                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
 
-            for p in processes:
-                p.join()
+                # Append the complete dictionary to the results list
+                results.append(text_result)
 
         except Exception as e:
-            logger.error(f"Batch {batch_idx // batch_size} failed: {str(e)}")
-            results.extend({"error": "Processing failed", "text": text} for text in batch_texts)
+            logger.error(f"Batch starting at index {batch_idx} failed: {str(e)}")
+            # Append error dicts for each text in the failed batch
+            results.extend([{"error": "Batch processing failed", "text": text} for text in batch_texts])
 
-    print(f"Total time taken: {time.time() - start_time} seconds")
-    return "list(results)"
+    # Return the list of dictionaries
+    return results
 
 async def process_texts(texts, is_passage=False, batch_size=0):
     """
@@ -205,13 +210,30 @@ def process_sparse_weights(sparse_weights):
         for token_id, weight in sparse_weights.items():
             if isinstance(token_id, str):
                 token_id = int(token_id)
+            # Extract value safely from numpy types
             values.append(float(weight.item()) if hasattr(weight, 'item') else float(weight))
             indexes.append(token_id)
     else:
         sparse_weights = np.array(sparse_weights) if not isinstance(sparse_weights, np.ndarray) else sparse_weights
         nonzero_indices = np.nonzero(sparse_weights)[0]
         nonzero_values = sparse_weights[nonzero_indices]
-        indexes = nonzero_indices.tolist()
-        values = [float(v) for v in nonzero_values.tolist()]
+        indexes = nonzero_indices.tolist()  # Already JSON-safe
 
+        # Process values to ensure they're Python-native floats
+        for d in nonzero_values:
+            if isinstance(d, defaultdict):
+                # Handle defaultdict values
+                for weight in d.values():
+                    try:
+                        # Convert numpy scalars to Python floats
+                        values.append(float(weight.item()) if hasattr(weight, 'item') else float(weight))
+                    except (ValueError, TypeError) as e:
+                        print(f"Could not convert value {weight} to float: {e}")
+            else:
+                # Directly handle numpy floats/ints
+                try:
+                    # Use .item() to extract Python scalar from numpy dtype
+                    values.append(float(d.item()) if hasattr(d, 'item') else float(d))
+                except (ValueError, TypeError) as e:
+                    print(f"Could not convert value {d} to float: {e}")
     return indexes, values
