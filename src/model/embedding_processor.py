@@ -1,10 +1,14 @@
 import math
 import multiprocessing
+import os
 import threading
+import time
 import numpy as np
 import asyncio
 from .model_loader import get_model
 from runpod import RunPodLogger
+
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 RED = "\033[91m"
 GREEN = "\033[92m"
@@ -22,34 +26,31 @@ def get_model_instance():
         model_instance = get_model()
     return model_instance
 
-def process_text_worker(texts, embeddings, results, j, segment):
-    for i, text in enumerate(texts):
-        text_result = {
-            "text": text,
-            "dense": embeddings["dense_vecs"][j].tolist()
+def process_text_worker(text, embeddings, results, j):
+    text_result = {
+        "text": text,
+        "dense": embeddings["dense_vecs"].tolist()
+    }
+
+    # Process sparse embeddings
+    sparse_weights = embeddings.get("lexical_weights", [None])
+    if sparse_weights is not None:
+        indexes, values = process_sparse_weights(sparse_weights)
+        text_result["sparse"] = {
+            "indices": indexes,
+            "values": values
+        }
+    else:
+        text_result["sparse"] = {
+            "indices": [],
+            "values": []
         }
 
-        # Process sparse embeddings
-        sparse_weights = embeddings.get("lexical_weights", [None])[j]
-        if sparse_weights is not None:
-            indexes, values = process_sparse_weights(sparse_weights)
-            text_result["sparse"] = {
-                "indices": indexes,
-                "values": values
-            }
-        else:
-            text_result["sparse"] = {
-                "indices": [],
-                "values": []
-            }
+    # Add colbert embeddings if available
+    if "colbert_vecs" in embeddings:
+        text_result["colbert"] = embeddings["colbert_vecs"].tolist()
 
-        # Add colbert embeddings if available
-        if "colbert_vecs" in embeddings:
-            text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
-
-        index = int(j*segment) + int(i)
-
-        results[index] = text_result
+    results[j] = text_result
 
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
@@ -65,15 +66,15 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         List of dictionaries containing the embeddings for each text
     """
     model = get_model_instance()
-    cores = 30
     results = []
-    
+    tokenizer = model.tokenizer
+
     if not texts:
         return []
 
     try:
         # Tokenize all texts first for optimal batching
-        tokenized = model.tokenizer(
+        tokenized = tokenizer(
             texts,
             truncation=True,
             padding=True,
@@ -93,40 +94,29 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     # Process in optimized batches
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
-
+        start_time = time.time()
         try:
-            # Use existing model methods for encoding
-            if is_passage:
-                embeddings = model.encode_corpus(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-            else:
-                embeddings = model.encode_queries(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-
             manager = multiprocessing.Manager()
             results = manager.list([None] * len(batch_texts))
-            segment = math.ceil(len(batch_texts) / cores)
             processes = []
-
-            for i in range(cores):
-                start = int(i * segment)
-                end = int((i + 1) * segment)
-                if end > len(batch_texts):
-                    end = len(batch_texts)
-                    p = multiprocessing.Process(target=process_text_worker, args=(batch_texts[start:end], embeddings, results, i, segment))
-                    processes.append(p)
-                    p.start()
-                    break
+            for i, text in enumerate(batch_texts):
+                # Use existing model methods for encoding
+                if is_passage:
+                    embeddings = model.encode_corpus(
+                        text,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
                 else:
-                    p = multiprocessing.Process(target=process_text_worker, args=(batch_texts[start:end], embeddings, results, i, segment))
+                    embeddings = model.encode_queries(
+                        text,
+                        return_dense=True,
+                        return_sparse=True,
+                        return_colbert_vecs=True
+                    )
+
+                    p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings, results, i))
                     processes.append(p)
                     p.start()
 
@@ -137,7 +127,8 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             logger.error(f"Batch {batch_idx // batch_size} failed: {str(e)}")
             results.extend({"error": "Processing failed", "text": text} for text in batch_texts)
 
-    return list(results)
+    print(f"Total time taken: {time.time() - start_time} seconds")
+    return "list(results)"
 
 async def process_texts(texts, is_passage=False, batch_size=0):
     """
