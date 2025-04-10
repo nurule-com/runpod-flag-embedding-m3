@@ -17,7 +17,7 @@ request_rate = 0
 last_rate_update = time.time()
 
 # Get concurrency settings from environment variables
-MAX_CONCURRENCY = int(os.environ.get("MAX_CONCURRENCY", "4"))
+MAX_CONCURRENCY = int(os.environ.get("MAX_CONCURRENCY", "30"))
 MIN_CONCURRENCY = int(os.environ.get("MIN_CONCURRENCY", "1"))
 SCALE_UP_THRESHOLD = float(os.environ.get("SCALE_UP_THRESHOLD", "0.05"))
 SCALE_DOWN_THRESHOLD = float(os.environ.get("SCALE_DOWN_THRESHOLD", "0.0"))
