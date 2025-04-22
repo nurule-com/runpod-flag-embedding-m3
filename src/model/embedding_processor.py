@@ -7,6 +7,8 @@ import threading
 import time
 import numpy as np
 import asyncio
+
+import torch
 from .model_loader import get_model
 from runpod import RunPodLogger
 
@@ -71,9 +73,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
         try:
-            manager = multiprocessing.Manager()
-            results = manager.list([None] * len(batch_texts))
-            processes = []
+            results = [None] * len(batch_texts)
 
             if is_passage:
                 embeddings = model.encode_corpus(
@@ -119,6 +119,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             logger.error(f"Batch starting at index {batch_idx} failed: {str(e)}")
             # Append error dicts for each text in the failed batch
             results.extend([{"error": "Batch processing failed", "text": text} for text in batch_texts])
+
+        # Clear the cache after each batch
+        torch.cuda.empty_cache()
 
     return list(results)
 
