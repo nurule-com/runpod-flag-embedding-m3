@@ -28,6 +28,31 @@ def get_model_instance():
         model_instance = get_model()
     return model_instance
 
+def process_text_worker(text, colbert_vecs, dense_vecs, lexical_weights, results, j):
+    text_result = {
+        "text": text,
+        "dense": dense_vecs.tolist()
+    }
+
+    # Process sparse embeddings
+    sparse_weights = lexical_weights
+    if sparse_weights is not None:
+        indexes, values = process_sparse_weights(sparse_weights)
+        text_result["sparse"] = {
+            "indices": indexes,
+            "values": values
+        }
+    else:
+        text_result["sparse"] = {
+            "indices": [],
+            "values": []
+        }
+
+    if colbert_vecs is not None:
+        text_result["colbert"] = colbert_vecs.tolist()
+
+    results[j] = text_result
+
 def process_texts_sync(texts, is_passage=False, batch_size=0):
     """
     Synchronous version of process_texts for use with thread pools.
@@ -70,10 +95,11 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     # Process in optimized batches
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
-        if not batch_texts:
-            continue
         try:
-            # Use existing model methods for encoding
+            manager = multiprocessing.Manager()
+            results = manager.list([None] * len(batch_texts))
+            processes = []
+
             if is_passage:
                 embeddings = model.encode_corpus(
                     batch_texts,
@@ -89,51 +115,20 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                     return_colbert_vecs=True
                 )
 
-            # Iterate through the texts *and their corresponding embeddings* in the current batch
-            for j, text in enumerate(batch_texts):
-                # Check if embeddings were generated successfully for this index
-                if not embeddings or "dense_vecs" not in embeddings or j >= len(embeddings["dense_vecs"]):
-                    logger.error(f"Missing dense_vecs for index {j} in batch starting at {batch_idx}")
-                    results.append({"error": "Embedding generation failed", "text": text})
-                    continue
+            for i, text in enumerate(batch_texts):
+                p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings['colbert_vecs'][i], embeddings['dense_vecs'][i], embeddings['lexical_weights'][i], results, i))
+                processes.append(p)
+                p.start()
 
-                text_result = {
-                    "text": text,
-                    # Access the embedding for the specific text using index j
-                    "dense": embeddings["dense_vecs"][j].tolist()
-                }
-
-                # Process sparse embeddings for the specific text using index j
-                sparse_weights = None
-                if "lexical_weights" in embeddings and embeddings["lexical_weights"] is not None and j < len(embeddings["lexical_weights"]):
-                    sparse_weights = embeddings["lexical_weights"][j]
-
-                if sparse_weights is not None:
-                    indexes, values = process_sparse_weights(sparse_weights)
-                    text_result["sparse"] = {
-                        "indices": indexes,
-                        "values": values
-                    }
-                else:
-                    text_result["sparse"] = {
-                        "indices": [],
-                        "values": []
-                    }
-
-                # Add colbert embeddings if available for the specific text using index j
-                if "colbert_vecs" in embeddings and embeddings["colbert_vecs"] is not None and j < len(embeddings["colbert_vecs"]):
-                    text_result["colbert"] = embeddings["colbert_vecs"][j].tolist()
-
-                # Append the complete dictionary to the results list
-                results.append(text_result)
+            for p in processes:
+                p.join()
 
         except Exception as e:
             logger.error(f"Batch starting at index {batch_idx} failed: {str(e)}")
             # Append error dicts for each text in the failed batch
             results.extend([{"error": "Batch processing failed", "text": text} for text in batch_texts])
 
-    # Return the list of dictionaries
-    return results
+    return list(results)
 
 async def process_texts(texts, is_passage=False, batch_size=0):
     """
