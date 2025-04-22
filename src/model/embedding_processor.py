@@ -26,14 +26,14 @@ def get_model_instance():
         model_instance = get_model()
     return model_instance
 
-def process_text_worker(text, embeddings, results, j):
+def process_text_worker(text, colbert_vecs, dense_vecs, lexical_weights, results, j):
     text_result = {
         "text": text,
-        "dense": embeddings["dense_vecs"].tolist()
+        "dense": dense_vecs.tolist()
     }
 
     # Process sparse embeddings
-    sparse_weights = embeddings.get("lexical_weights", [None])
+    sparse_weights = lexical_weights
     if sparse_weights is not None:
         indexes, values = process_sparse_weights(sparse_weights)
         text_result["sparse"] = {
@@ -47,8 +47,8 @@ def process_text_worker(text, embeddings, results, j):
         }
 
     # Add colbert embeddings if available
-    if "colbert_vecs" in embeddings:
-        text_result["colbert"] = embeddings["colbert_vecs"].tolist()
+    if colbert_vecs is not None:
+        text_result["colbert"] = colbert_vecs.tolist()
 
     results[j] = text_result
 
@@ -98,26 +98,26 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             manager = multiprocessing.Manager()
             results = manager.list([None] * len(batch_texts))
             processes = []
-            for i, text in enumerate(batch_texts):
-                # Use existing model methods for encoding
-                if is_passage:
-                    embeddings = model.encode_corpus(
-                        text,
-                        return_dense=True,
-                        return_sparse=True,
-                        return_colbert_vecs=True
-                    )
-                else:
-                    embeddings = model.encode_queries(
-                        text,
-                        return_dense=True,
-                        return_sparse=True,
-                        return_colbert_vecs=True
-                    )
 
-                    p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings, results, i))
-                    processes.append(p)
-                    p.start()
+            if is_passage:
+                embeddings = model.encode_corpus(
+                    batch_texts,
+                    return_dense=True,
+                    return_sparse=True,
+                    return_colbert_vecs=True
+                )
+            else:
+                embeddings = model.encode_queries(
+                    batch_texts,
+                    return_dense=True,
+                    return_sparse=True,
+                    return_colbert_vecs=True
+                )
+
+            for i, text in enumerate(batch_texts):
+                p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings['colbert_vecs'][i], embeddings['dense_vecs'][i], embeddings['lexical_weights'][i], results, i))
+                processes.append(p)
+                p.start()
 
             for p in processes:
                 p.join()

@@ -17,14 +17,14 @@ request_rate = 0
 last_rate_update = time.time()
 
 # Get concurrency settings from environment variables
-MAX_CONCURRENCY = int(os.environ.get("MAX_CONCURRENCY", "30"))
+MAX_CONCURRENCY = int(os.environ.get("MAX_CONCURRENCY", "15"))
 MIN_CONCURRENCY = int(os.environ.get("MIN_CONCURRENCY", "1"))
 SCALE_UP_THRESHOLD = float(os.environ.get("SCALE_UP_THRESHOLD", "0.05"))
 SCALE_DOWN_THRESHOLD = float(os.environ.get("SCALE_DOWN_THRESHOLD", "0.0"))
 THREAD_POOL_SIZE = int(os.environ.get("THREAD_POOL_SIZE", str(MAX_CONCURRENCY * 2)))
 
 # Create a thread pool executor
-thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_SIZE)
+thread_pool = concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_POOL_SIZE)
 
 logger.info(f"Concurrency settings: MAX={MAX_CONCURRENCY}, MIN={MIN_CONCURRENCY}")
 logger.info(f"Scaling thresholds: UP={SCALE_UP_THRESHOLD} req/s, DOWN={SCALE_DOWN_THRESHOLD} req/s")
