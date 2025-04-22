@@ -94,7 +94,6 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     # Process in optimized batches
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
-        start_time = time.time()
         try:
             manager = multiprocessing.Manager()
             results = manager.list([None] * len(batch_texts))
@@ -127,8 +126,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             logger.error(f"Batch {batch_idx // batch_size} failed: {str(e)}")
             results.extend({"error": "Processing failed", "text": text} for text in batch_texts)
 
-    print(f"Total time taken: {time.time() - start_time} seconds")
-    return "list(results)"
+    return list(results)
 
 async def process_texts(texts, is_passage=False, batch_size=0):
     """
