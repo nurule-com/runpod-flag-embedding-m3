@@ -46,7 +46,6 @@ def process_text_worker(text, colbert_vecs, dense_vecs, lexical_weights, results
             "values": []
         }
 
-    # Add colbert embeddings if available
     if colbert_vecs is not None:
         text_result["colbert"] = colbert_vecs.tolist()
 
