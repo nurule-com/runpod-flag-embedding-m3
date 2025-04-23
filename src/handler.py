@@ -53,27 +53,7 @@ async def handler(job):
 
     return {"results": results}
 
-def concurrency_modifier(current_concurrency):
-    """
-    global request_count, last_rate_update, request_rate
-    
-    current_time = time.time()
-    if current_time - last_rate_update >= 10:
-        time_diff = current_time - last_rate_update
-        if time_diff > 0:
-            request_rate = request_count / time_diff
-        
-        request_count = 0
-        last_rate_update = current_time
-        
-        logger.info(f"Current request rate: {request_rate:.2f} req/s, Concurrency: {current_concurrency}")
-    
-    if request_rate > SCALE_UP_THRESHOLD and current_concurrency < MAX_CONCURRENCY:
-        return current_concurrency + 1
-    elif request_rate <= SCALE_DOWN_THRESHOLD and current_concurrency > MIN_CONCURRENCY:
-        return current_concurrency - 1
-    """
-    
+def concurrency_modifier():
     return CONCURRENCY
 
 # Start the serverless worker with the async handler and concurrency modifier
