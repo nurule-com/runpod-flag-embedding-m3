@@ -1,5 +1,4 @@
 import runpod
-import asyncio
 import time
 import os
 import concurrent.futures
@@ -45,22 +44,17 @@ async def handler(job):
     
     if result["empty"]:
         return {"results": []}
-    
-    try:
-        # Offload the CPU-intensive model inference to a separate thread
-        results = await asyncio.get_event_loop().run_in_executor(
-            thread_pool,
-            process_texts_sync,
-            result["texts"],
-            result["is_passage"],
-            result["batch_size"]
-        )
-        return {"results": results}
-    except Exception as e:
-        logger.error(f"Error processing texts: {str(e)}")
-        return {"error": f"Error processing texts: {str(e)}"}
+
+    results = process_texts_sync(
+        result["texts"],
+        result["is_passage"],
+        result["batch_size"]
+    )
+
+    return {"results": results}
 
 def concurrency_modifier(current_concurrency):
+    """
     global request_count, last_rate_update, request_rate
     
     current_time = time.time()
@@ -78,11 +72,12 @@ def concurrency_modifier(current_concurrency):
         return current_concurrency + 1
     elif request_rate <= SCALE_DOWN_THRESHOLD and current_concurrency > MIN_CONCURRENCY:
         return current_concurrency - 1
+    """
     
-    return current_concurrency
+    return CONCURRENCY
 
 # Start the serverless worker with the async handler and concurrency modifier
 runpod.serverless.start({
     "handler": handler,
-    "concurrency_modifier": CONCURRENCY
+    "concurrency_modifier": concurrency_modifier
 })
