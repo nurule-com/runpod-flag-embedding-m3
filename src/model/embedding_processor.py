@@ -1,14 +1,9 @@
 from collections import defaultdict
-import json
-import math
-import multiprocessing
 import os
 import threading
-import time
 import numpy as np
 import asyncio
 
-import torch
 from .model_loader import get_model
 from runpod import RunPodLogger
 
@@ -98,9 +93,7 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
     for batch_idx in range(0, len(texts), batch_size):
         batch_texts = texts[batch_idx:batch_idx + batch_size]
         try:
-            manager = multiprocessing.Manager()
-            results = manager.list([None] * len(batch_texts))
-            processes = []
+            results = [None] * len(batch_texts)
 
             if is_passage:
                 embeddings = model.encode_corpus(
@@ -118,20 +111,33 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
                 )
 
             for i, text in enumerate(batch_texts):
-                p = multiprocessing.Process(target=process_text_worker, args=(text, embeddings['colbert_vecs'][i], embeddings['dense_vecs'][i], embeddings['lexical_weights'][i], results, i))
-                processes.append(p)
-                p.start()
+                text_result = {
+                    "text": text,
+                    "dense": embeddings["dense_vecs"][i].tolist()
+                }
 
-            for p in processes:
-                p.join()
+                # Process sparse embeddings
+                sparse_weights = embeddings["lexical_weights"][i]
+                if sparse_weights is not None:
+                    indexes, values = process_sparse_weights(sparse_weights)
+                    text_result["sparse"] = {
+                        "indices": indexes,
+                        "values": values
+                    }
+                else:
+                    text_result["sparse"] = {
+                        "indices": [],
+                        "values": []
+                    }
 
+                if embeddings["colbert_vecs"] is not None:
+                    text_result["colbert"] = embeddings["colbert_vecs"][i].tolist()
+
+                results[i] = text_result
         except Exception as e:
             logger.error(f"Batch starting at index {batch_idx} failed: {str(e)}")
             # Append error dicts for each text in the failed batch
             results.extend([{"error": "Batch processing failed", "text": text} for text in batch_texts])
-
-        # Clear the cache after each batch
-        torch.cuda.empty_cache()
 
     return list(results)
 
