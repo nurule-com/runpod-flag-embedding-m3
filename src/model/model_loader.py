@@ -15,9 +15,10 @@ model = None
 if hasattr(torch.nn.Module, 'to_empty'):
     _orig_to = torch.nn.Module.to
     def _safe_to(self, *args, **kwargs):
-        # If any parameter is on meta device, use to_empty to allocate properly
+        # If any parameter is on meta device, create an empty module then move it
         if any(p.device.type == 'meta' for p in self.parameters()):
-            return torch.nn.Module.to_empty(self, *args, **kwargs)
+            new_mod = self.to_empty()
+            return _orig_to(new_mod, *args, **kwargs)
         return _orig_to(self, *args, **kwargs)
     torch.nn.Module.to = _safe_to
 
