@@ -3,7 +3,7 @@ import os
 import threading
 import numpy as np
 import asyncio
-
+import torch
 from .model_loader import get_model
 from runpod import RunPodLogger
 
@@ -138,6 +138,9 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
             logger.error(f"Batch starting at index {batch_idx} failed: {str(e)}")
             # Append error dicts for each text in the failed batch
             results.extend([{"error": "Batch processing failed", "text": text} for text in batch_texts])
+
+    # Empty the cache
+    torch.cuda.empty_cache()
 
     return list(results)
 
