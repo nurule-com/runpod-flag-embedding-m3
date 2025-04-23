@@ -2,6 +2,7 @@ import os
 import atexit
 import logging
 from FlagEmbedding import BGEM3FlagModel
+import torch
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -9,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 # Global model variable
 model = None
+
+# Monkey-patch torch.nn.Module.to to safely move meta modules using to_empty
+if hasattr(torch.nn.Module, 'to_empty'):
+    _orig_to = torch.nn.Module.to
+    def _safe_to(self, *args, **kwargs):
+        # If any parameter is on meta device, use to_empty to allocate properly
+        if any(p.device.type == 'meta' for p in self.parameters()):
+            return torch.nn.Module.to_empty(self, *args, **kwargs)
+        return _orig_to(self, *args, **kwargs)
+    torch.nn.Module.to = _safe_to
 
 def get_model():
     """
