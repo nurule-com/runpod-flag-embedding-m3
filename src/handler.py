@@ -82,6 +82,5 @@ def concurrency_modifier(current_concurrency):
 
 # Start the serverless worker with the async handler and concurrency modifier
 runpod.serverless.start({
-    "handler": handler,
-    "concurrency_modifier": concurrency_modifier
+    "handler": handler
 })
