@@ -52,7 +52,6 @@ async def handler(job):
             thread_pool,
             process_texts_sync,
             result["texts"],
-            result["is_passage"],
             result["batch_size"]
         )
         return {"results": results}

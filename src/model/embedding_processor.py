@@ -50,14 +50,13 @@ def process_text_worker(text, colbert_vecs, dense_vecs, lexical_weights, results
 
     results[j] = text_result
 
-def process_texts_sync(texts, is_passage=False, batch_size=0):
+def process_texts_sync(texts, batch_size=0):
     """
     Synchronous version of process_texts for use with thread pools.
     Process a list of texts and return embeddings for each.
     
     Args:
         texts: List of text strings to encode
-        is_passage: Whether the texts are passages (True) or queries (False)
         batch_size: Number of texts to process at once. If 0 or negative, all texts are processed at once (default).
         
     Returns:
@@ -95,20 +94,12 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
         try:
             results = [None] * len(batch_texts)
 
-            if is_passage:
-                embeddings = model.encode_corpus(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
-            else:
-                embeddings = model.encode_queries(
-                    batch_texts,
-                    return_dense=True,
-                    return_sparse=True,
-                    return_colbert_vecs=True
-                )
+            embeddings = model.encode(
+                batch_texts,
+                return_dense=True,
+                return_sparse=True,
+                return_colbert_vecs=True
+            )
 
             for i, text in enumerate(batch_texts):
                 text_result = {
@@ -144,13 +135,12 @@ def process_texts_sync(texts, is_passage=False, batch_size=0):
 
     return list(results)
 
-async def process_texts(texts, is_passage=False, batch_size=0):
+async def process_texts(texts, batch_size=0):
     """
     Process a list of texts and return sparse, dense, and colbert embeddings for each.
     
     Args:
         texts: List of text strings to encode
-        is_passage: Whether the texts are passages (True) or queries (False)
         batch_size: Number of texts to process at once. If 0 or negative, all texts are processed at once (default).
         
     Returns:
@@ -166,8 +156,13 @@ async def process_texts(texts, is_passage=False, batch_size=0):
     for start_idx, end_idx in batch_ranges:
         batch_texts = texts[start_idx:end_idx]
         try:
-            # Use the appropriate encoding method based on text type
-            embeddings = model.encode_corpus(batch_texts, return_dense=True, return_sparse=True, return_colbert_vecs=True) if is_passage else model.encode_queries(batch_texts, return_dense=True, return_sparse=True, return_colbert_vecs=True)
+            # Use the encode method
+            embeddings = model.encode(
+                batch_texts, 
+                return_dense=True, 
+                return_sparse=True, 
+                return_colbert_vecs=True
+            )
 
             for j, text in enumerate(batch_texts):
                 try:

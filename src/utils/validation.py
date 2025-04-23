@@ -26,10 +26,7 @@ def validate_input(job_input):
     
     # Process empty list case
     if len(texts) == 0:
-        return True, {"texts": [], "is_passage": False, "batch_size": 0, "empty": True}
-    
-    # Check if texts are passages or queries
-    is_passage = job_input.get("isPassage", False)
+        return True, {"texts": [], "batch_size": 0, "empty": True}
     
     # Get batch size (0 means no batching, which is the default)
     batch_size = job_input.get("batchSize", 0)
@@ -37,7 +34,6 @@ def validate_input(job_input):
     # Return validated parameters
     return True, {
         "texts": texts,
-        "is_passage": is_passage,
         "batch_size": batch_size,
         "empty": False
     } 
