@@ -1,3 +1,4 @@
+import asyncio
 import runpod
 import time
 import os
@@ -45,13 +46,19 @@ async def handler(job):
     if result["empty"]:
         return {"results": []}
 
-    results = process_texts_sync(
-        result["texts"],
-        result["is_passage"],
-        result["batch_size"]
-    )
-
-    return {"results": results}
+    try:
+        # Offload the CPU-intensive model inference to a separate thread
+        results = await asyncio.get_event_loop().run_in_executor(
+            thread_pool,
+            process_texts_sync,
+            result["texts"],
+            result["is_passage"],
+            result["batch_size"]
+        )
+        return {"results": results}
+    except Exception as e:
+        logger.error(f"Error processing texts: {str(e)}")
+        return {"error": f"Error processing texts: {str(e)}"}
 
 def concurrency_modifier(current_concurrency):
     current_concurrency = CONCURRENCY
