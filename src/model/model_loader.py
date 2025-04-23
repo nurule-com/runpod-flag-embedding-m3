@@ -11,16 +11,28 @@ logger = logging.getLogger(__name__)
 # Global model variable
 model = None
 
-# Monkey-patch torch.nn.Module.to to safely move meta modules using to_empty
+# Monkey-patch torch.nn.Module.to_empty to support both positional and keyword args
 if hasattr(torch.nn.Module, 'to_empty'):
-    _orig_to = torch.nn.Module.to
-    def _safe_to(self, *args, **kwargs):
-        # If any parameter is on meta device, create an empty module then move it
-        if any(p.device.type == 'meta' for p in self.parameters()):
-            new_mod = self.to_empty()
-            return _orig_to(new_mod, *args, **kwargs)
-        return _orig_to(self, *args, **kwargs)
-    torch.nn.Module.to = _safe_to
+    _orig_to_empty = torch.nn.Module.to_empty
+    def _safe_to_empty(self, *args, **kwargs):
+        # Try original call first
+        try:
+            return _orig_to_empty(self, *args, **kwargs)
+        except TypeError as e:
+            msg = str(e)
+            # Handle missing keyword-only 'device' error
+            if "required keyword-only argument: 'device'" in msg:
+                # Extract device and dtype from args or kwargs
+                if args:
+                    device = args[0]
+                    dtype = args[1] if len(args) > 1 else None
+                else:
+                    device = kwargs.get('device') or os.environ.get('GPU_DEVICE', 'cuda:0')
+                    dtype = kwargs.get('dtype', None)
+                return _orig_to_empty(self, device=device, dtype=dtype)
+            # Re-raise other TypeErrors
+            raise
+    torch.nn.Module.to_empty = _safe_to_empty
 
 def get_model():
     """
