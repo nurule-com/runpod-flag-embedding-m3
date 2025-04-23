@@ -25,7 +25,7 @@ THREAD_POOL_SIZE = int(os.environ.get("THREAD_POOL_SIZE", str(MAX_CONCURRENCY * 
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "10"))
 
 # Create a thread pool executor
-thread_pool = concurrent.futures.ProcessPoolExecutor(max_workers=THREAD_POOL_SIZE)
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREAD_POOL_SIZE)
 
 logger.info(f"Concurrency settings: MAX={MAX_CONCURRENCY}, MIN={MIN_CONCURRENCY}")
 logger.info(f"Scaling thresholds: UP={SCALE_UP_THRESHOLD} req/s, DOWN={SCALE_DOWN_THRESHOLD} req/s")
