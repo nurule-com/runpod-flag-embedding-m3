@@ -1,7 +1,11 @@
 import random
+import time
 from .model_loader import get_model
+from runpod import RunPodLogger
 
 model_instance = None
+
+logger = RunPodLogger()
 
 def get_model_instance():
     global model_instance
@@ -10,6 +14,7 @@ def get_model_instance():
     return model_instance
 
 def process_texts_sync(texts):
+    start_time = time.time()
     """
     Synchronous version of process_texts for use with thread pools.
     Process a list of texts and return embeddings for each.
@@ -55,6 +60,8 @@ def process_texts_sync(texts):
 
         results[i] = text_result
 
+    end_time = time.time()
+    logger.info(f"Time taken: {end_time - start_time} seconds")
     return list(results)
 
 def process_sparse_weights(sparse_weights):
