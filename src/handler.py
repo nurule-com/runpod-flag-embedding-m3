@@ -1,10 +1,13 @@
 import runpod
 import os
+from src.model.model_loader import load_model
 from utils.validation import validate_input
 from model.embedding_processor import process_texts_sync
 
 # Get concurrency settings from environment variables
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "10"))
+
+load_model()
 
 async def handler(job):  
     job_input = job["input"]
