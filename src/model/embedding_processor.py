@@ -1,3 +1,4 @@
+import random
 from .model_loader import get_model
 
 model_instance = None
@@ -20,7 +21,8 @@ def process_texts_sync(texts):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
-    model = get_model_instance()
+    models = get_model_instance()
+    model = random.choice(models)
     results = []
 
     if not texts:

@@ -61,6 +61,10 @@ def load_model():
     gpu_device = os.environ.get("GPU_DEVICE", "cuda:0")
     model_name = "BAAI/bge-m3"
     
+    # Get amount of models from environment variable or use default
+    amount_of_models = int(os.environ.get("AMOUNT_OF_MODELS", "10"))
+    model = [None] * amount_of_models
+
     # Disable hf_transfer if the package is not available
     if os.environ.get("HF_HUB_ENABLE_HF_TRANSFER") == "1":
         try:
@@ -73,12 +77,13 @@ def load_model():
     try:
         logger.info(f"Loading {model_name} model on {gpu_device}...")
         
-        # Use the specific FlagEmbedding implementation for BGE-M3
-        model = BGEM3FlagModel(
-            model_name, 
-            use_fp16=True,
-            device=gpu_device
-        )
+        for i in range(amount_of_models):
+            # Use the specific FlagEmbedding implementation for BGE-M3
+            model[i] = BGEM3FlagModel(
+                model_name, 
+                use_fp16=True,
+                device=gpu_device
+            )
         
         logger.info(f"Successfully loaded {model_name} model on {gpu_device}")
         

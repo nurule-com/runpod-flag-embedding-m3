@@ -1,11 +1,7 @@
 import runpod
 import os
-import logging
 from utils.validation import validate_input
 from model.embedding_processor import process_texts_sync
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Get concurrency settings from environment variables
 CONCURRENCY = int(os.environ.get("CONCURRENCY", "10"))
@@ -24,7 +20,7 @@ async def handler(job):
     results = process_texts_sync(
         result["texts"]
     )
-    
+
     return {"results": results}
 
 def concurrency_modifier(current_concurrency):
