@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import random
@@ -61,9 +62,11 @@ def process_texts_sync(texts):
     )
     buf.seek(0)
 
+    encoded = base64.b64encode(buf.read()).decode("utf-8")
+
     end_time = time.time()
     logger.info(f"Tiempo total (incluyendo generación .npz): {end_time - start_time} segundos")
-    return buf  # este buffer será devuelto como respuesta
+    return encoded  # este buffer será devuelto como respuesta
 
 def process_sparse_weights(sparse_weights):
     """
