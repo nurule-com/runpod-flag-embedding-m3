@@ -1,5 +1,10 @@
+import io
+import json
 import random
+import sys
 import time
+
+import numpy as np
 from .model_loader import get_model
 from runpod import RunPodLogger
 
@@ -14,7 +19,6 @@ def get_model_instance():
     return model_instance
 
 def process_texts_sync(texts):
-    start_time = time.time()
     """
     Synchronous version of process_texts for use with thread pools.
     Process a list of texts and return embeddings for each.
@@ -26,14 +30,12 @@ def process_texts_sync(texts):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
+    start_time = time.time()
     models = get_model_instance()
     model = random.choice(models)
-    results = []
 
     if not texts:
-        return []
-
-    results = [None] * len(texts)
+        return None
 
     embeddings = model.encode(
         texts,
@@ -42,27 +44,26 @@ def process_texts_sync(texts):
         return_colbert_vecs=True
     )
 
-    for i, text in enumerate(texts):
-        text_result = {
-            "text": text,
-            "dense": embeddings["dense_vecs"][i].tolist()
-        }
+    # Solo manejamos el primer texto
+    dense = embeddings["dense_vecs"][0]
+    sparse_weights = embeddings["lexical_weights"][0]
+    colbert = embeddings["colbert_vecs"][0]
 
-        # Process sparse embeddings
-        sparse_weights = embeddings["lexical_weights"][i]
-        indexes, values = process_sparse_weights(sparse_weights)
-        text_result["sparse"] = {
-            "indices": indexes,
-            "values": values
-        }
+    sparse_indices, sparse_values = process_sparse_weights(sparse_weights)
 
-        text_result["colbert"] = embeddings["colbert_vecs"][i].tolist()
-
-        results[i] = text_result
+    # Crear archivo .npz en memoria
+    buf = io.BytesIO()
+    np.savez(buf,
+        dense=np.array(dense),
+        sparse_indices=np.array(sparse_indices),
+        sparse_values=np.array(sparse_values),
+        colbert=np.array(colbert)
+    )
+    buf.seek(0)
 
     end_time = time.time()
-    logger.info(f"Time taken: {end_time - start_time} seconds")
-    return list(results)
+    logger.info(f"Tiempo total (incluyendo generación .npz): {end_time - start_time} segundos")
+    return buf  # este buffer será devuelto como respuesta
 
 def process_sparse_weights(sparse_weights):
     """

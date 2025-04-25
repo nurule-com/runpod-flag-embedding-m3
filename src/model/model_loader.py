@@ -62,7 +62,7 @@ def load_model():
     model_name = "BAAI/bge-m3"
     
     # Get amount of models from environment variable or use default
-    amount_of_models = int(os.environ.get("AMOUNT_OF_MODELS", "10"))
+    amount_of_models = int(os.environ.get("AMOUNT_OF_MODELS", "1"))
     model = [None] * amount_of_models
 
     # Disable hf_transfer if the package is not available
