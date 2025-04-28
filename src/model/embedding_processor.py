@@ -1,8 +1,6 @@
 import base64
 import io
-import json
 import random
-import sys
 import time
 
 import numpy as np
@@ -58,14 +56,13 @@ def process_texts_sync(texts):
         sparse_values.append(sparse_value)
 
     buf = io.BytesIO()
-    np.savez(buf,
-        dense=np.array(dense),
-        sparse_indices = np.array(sparse_indices, dtype=object),
-        sparse_values = np.array(sparse_values, dtype=object),
-        colbert=np.array(colbert)
+    np.savez_compressed(buf,
+        dense=np.array(dense, dtype=np.float16),
+        sparse_indices=np.array(sparse_indices, dtype=object),
+        sparse_values=np.array(sparse_values, dtype=object),
+        colbert=np.array(colbert, dtype=np.float16)
     )
     buf.seek(0)
-
     encoded = base64.b64encode(buf.read()).decode("utf-8")
 
     end_time = time.time()
