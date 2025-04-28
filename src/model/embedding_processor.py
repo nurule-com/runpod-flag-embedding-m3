@@ -31,6 +31,10 @@ def process_texts_sync(texts):
     Returns:
         List of dictionaries containing the embeddings for each text
     """
+    dense = []
+    sparse_indices = []
+    sparse_values = []
+    colbert = []
     start_time = time.time()
     models = get_model_instance()
     model = random.choice(models)
@@ -45,19 +49,19 @@ def process_texts_sync(texts):
         return_colbert_vecs=True
     )
 
-    # Solo manejamos el primer texto
-    dense = embeddings["dense_vecs"][0]
-    sparse_weights = embeddings["lexical_weights"][0]
-    colbert = embeddings["colbert_vecs"][0]
+    for i in range(len(texts)):
+        dense.append(embeddings["dense_vecs"][i])
+        colbert.append(embeddings["colbert_vecs"][i])
+        sparse_weights = embeddings["lexical_weights"][i]
+        sparse_index, sparse_value = process_sparse_weights(sparse_weights)
+        sparse_indices.append(sparse_index)
+        sparse_values.append(sparse_value)
 
-    sparse_indices, sparse_values = process_sparse_weights(sparse_weights)
-
-    # Crear archivo .npz en memoria
     buf = io.BytesIO()
     np.savez(buf,
         dense=np.array(dense),
-        sparse_indices=np.array(sparse_indices),
-        sparse_values=np.array(sparse_values),
+        sparse_indices = np.array(sparse_indices, dtype=object),
+        sparse_values = np.array(sparse_values, dtype=object),
         colbert=np.array(colbert)
     )
     buf.seek(0)
@@ -65,8 +69,8 @@ def process_texts_sync(texts):
     encoded = base64.b64encode(buf.read()).decode("utf-8")
 
     end_time = time.time()
-    logger.info(f"Tiempo total (incluyendo generación .npz): {end_time - start_time} segundos")
-    return encoded  # este buffer será devuelto como respuesta
+    logger.info(f"Total time (including .npz generation): {end_time - start_time} seconds")
+    return encoded
 
 def process_sparse_weights(sparse_weights):
     """
