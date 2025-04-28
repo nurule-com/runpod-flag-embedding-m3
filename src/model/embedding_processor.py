@@ -1,8 +1,6 @@
 import base64
 import io
 import random
-import time
-
 import numpy as np
 from .model_loader import get_model
 from runpod import RunPodLogger
@@ -33,7 +31,6 @@ def process_texts_sync(texts):
     sparse_indices = []
     sparse_values = []
     colbert = []
-    start_time = time.time()
     models = get_model_instance()
     model = random.choice(models)
 
@@ -64,9 +61,6 @@ def process_texts_sync(texts):
     )
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode("utf-8")
-
-    end_time = time.time()
-    logger.info(f"Total time (including .npz generation): {end_time - start_time} seconds")
     return encoded
 
 def process_sparse_weights(sparse_weights):
@@ -84,7 +78,7 @@ def process_sparse_weights(sparse_weights):
 
     for token_id, weight in sparse_weights.items():
         token_id = int(token_id) if isinstance(token_id, str) else token_id
-        values.append(float(weight.item()) if hasattr(weight, 'item') else float(weight))
+        values.append(float(weight))
         indexes.append(token_id)
-
+        
     return indexes, values
