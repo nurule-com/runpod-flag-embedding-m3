@@ -3,11 +3,8 @@ import io
 import random
 import numpy as np
 from .model_loader import get_model
-from runpod import RunPodLogger
 
 model_instance = None
-
-logger = RunPodLogger()
 
 def get_model_instance():
     global model_instance
@@ -22,7 +19,6 @@ def process_texts_sync(texts):
     
     Args:
         texts: List of text strings to encode
-        batch_size: Number of texts to process at once. If 0 or negative, all texts are processed at once (default).
         
     Returns:
         List of dictionaries containing the embeddings for each text
