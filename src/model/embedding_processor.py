@@ -53,7 +53,7 @@ def process_texts_sync(texts):
         dense=np.array(dense, dtype=np.float16),
         sparse_indices=np.array(sparse_indices, dtype=object),
         sparse_values=np.array(sparse_values, dtype=object),
-        colbert=np.array(colbert, dtype=np.float16)
+        colbert=np.array(colbert, dtype=object)
     )
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode("utf-8")
